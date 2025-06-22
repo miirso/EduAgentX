@@ -1,0 +1,8 @@
+一切你写的代码都不能修改我之前写的所有代码。
+你必须参考我已经写好的代码。
+
+convention文件夹下的result文件夹下由有写好的结果类。
+
+
+我的环境是springboot，然后数据库操作用mybatisplus。
+数据库是redis和postgresql。

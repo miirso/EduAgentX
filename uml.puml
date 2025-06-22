@@ -1,0 +1,226 @@
+```plantuml
+@startuml
+
+entity "admin" as admin {
+  '-- 管理员表 (admin) --
+  + id: VARCHAR(255) <<PK>> '主键ID
+  --
+  username: VARCHAR(255) '用户名
+  password: VARCHAR(255) '密码
+  create_time: TIMESTAMP '创建时间
+  update_time: TIMESTAMP '更新时间
+  tag: BOOLEAN '逻辑删除标识
+}
+
+entity "teacher" as teacher {
+  '-- 教师表 (teacher) --
+  + id: VARCHAR(255) <<PK>> '主键ID
+  --
+  username: VARCHAR(255) '用户名
+  password: VARCHAR(255) '密码
+  real_name: VARCHAR(255) '真实姓名
+  gender: INTEGER '性别
+  phone: VARCHAR(20) '电话
+  teacher_no: VARCHAR(255) '教师工号
+  school: VARCHAR(255) '学校
+  college: VARCHAR(255) '学院
+  create_time: TIMESTAMP '创建时间
+  update_time: TIMESTAMP '更新时间
+  tag: BOOLEAN '逻辑删除标识
+}
+
+entity "student" as student {
+  '-- 学生表 (student) --
+  + id: VARCHAR(255) <<PK>> '主键ID
+  --
+  username: VARCHAR(255) '用户名
+  password: VARCHAR(255) '密码
+  student_no: VARCHAR(255) '学号
+  real_name: VARCHAR(255) '真实姓名
+  gender: INTEGER '性别
+  phone: VARCHAR(20) '电话
+  email: VARCHAR(255) '邮箱
+  major_code: VARCHAR(255) '专业代码
+  class_code: VARCHAR(255) '班级代码
+  college: VARCHAR(255) '学院
+  school: VARCHAR(255) '学校
+  create_time: TIMESTAMP '创建时间
+  update_time: TIMESTAMP '更新时间
+  tag: BOOLEAN '逻辑删除标识
+}
+
+entity "courses" as courses {
+  '-- 课程表 (courses) --
+  + id: VARCHAR(8) <<PK>> '主键ID
+  --
+  subject_id: INTEGER <<FK>> '学科ID
+  name: VARCHAR(255) '课程名称
+  description: TEXT '课程描述
+  cover_image: VARCHAR(255) '封面图片
+  start_date: DATE '开课日期
+  end_date: DATE '结课日期
+  assessment_method: VARCHAR(16) '考核方式
+  create_time: TIMESTAMP '创建时间
+  update_time: TIMESTAMP '更新时间
+  tag: BOOLEAN '逻辑删除标识
+}
+
+entity "subjects" as subjects {
+  '-- 学科表 (subjects) --
+  + id: SERIAL <<PK>> '主键ID
+  --
+  name: VARCHAR(255) '学科名称
+  description: TEXT '学科描述
+  create_time: TIMESTAMP '创建时间
+  update_time: TIMESTAMP '更新时间
+  tag: BOOLEAN '逻辑删除标识
+}
+
+entity "course_teachers" as course_teachers {
+  '-- 课程教师关联表 (course_teachers) --
+  + id: SERIAL <<PK>> '主键ID
+  --
+  course_id: VARCHAR(8) <<FK>> '课程ID
+  teacher_id: VARCHAR(255) <<FK>> '教师ID
+}
+
+entity "classes" as classes {
+  '-- 班级表 (classes) --
+  + id: SERIAL <<PK>> '主键ID
+  --
+  name: VARCHAR(255) '班级名称
+  major_id: VARCHAR(8) '专业ID
+  create_time: TIMESTAMP '创建时间
+  update_time: TIMESTAMP '更新时间
+  tag: BOOLEAN '逻辑删除标识
+}
+
+entity "course_classes" as course_classes {
+  '-- 课程班级关联表 (course_classes) --
+  + id: SERIAL <<PK>> '主键ID
+  --
+  course_id: VARCHAR(8) <<FK>> '课程ID
+  class_id: INTEGER <<FK>> '班级ID
+}
+
+entity "enrollments" as enrollments {
+  '-- 学生选课表 (enrollments) --
+  + id: SERIAL <<PK>> '主键ID
+  --
+  student_id: VARCHAR(255) <<FK>> '学生ID
+  course_id: VARCHAR(8) <<FK>> '课程ID
+  enrollment_date: TIMESTAMP '选课日期
+}
+
+entity "chapters" as chapters {
+  '-- 课程章节表 (chapters) --
+  + id: SERIAL <<PK>> '主键ID
+  --
+  course_id: VARCHAR(8) <<FK>> '课程ID
+  title: VARCHAR(255) '章节标题
+  content: TEXT '章节内容
+  order: INTEGER '顺序
+  create_time: TIMESTAMP '创建时间
+  update_time: TIMESTAMP '更新时间
+  tag: BOOLEAN '逻辑删除标识
+}
+
+entity "resources" as resources {
+  '-- 教学资源表 (resources) --
+  + id: SERIAL <<PK>> '主键ID
+  --
+  course_id: VARCHAR(8) <<FK>> '课程ID
+  user_id: VARCHAR(255) '用户ID
+  user_role: VARCHAR(50) '用户角色
+  title: VARCHAR(255) '资源标题
+  description: TEXT '资源描述
+  resource_type: VARCHAR(50) '资源类型
+  file_name: VARCHAR(255) '文件名
+  file_path: VARCHAR(255) '文件路径
+  file_size: INTEGER '文件大小
+  version: INTEGER '版本
+  is_shared: BOOLEAN '是否共享
+  upload_time: TIMESTAMP '上传时间
+  tag: BOOLEAN '逻辑删除标识
+}
+
+entity "questions" as questions {
+  '-- 问题表 (questions) --
+  + id: VARCHAR(16) <<PK>> '主键ID
+  --
+  course_id: VARCHAR(8) <<FK>> '课程ID
+  chapter_id: INTEGER <<FK>> '章节ID
+  type: VARCHAR(1) '问题类型
+  content: TEXT '问题内容
+  options: JSONB '选项
+  answer: TEXT '答案
+  analysis: TEXT '解析
+  create_time: TIMESTAMP '创建时间
+  update_time: TIMESTAMP '更新时间
+  tag: BOOLEAN '逻辑删除标识
+}
+
+entity "discussions" as discussions {
+  '-- 讨论表 (discussions) --
+  + id: SERIAL <<PK>> '主键ID
+  --
+  course_id: VARCHAR(8) <<FK>> '课程ID
+  user_id: VARCHAR(255) '用户ID
+  user_role: VARCHAR(50) '用户角色
+  parent_id: INTEGER <<FK>> '父级ID
+  content: TEXT '内容
+  create_time: TIMESTAMP '创建时间
+  update_time: TIMESTAMP '更新时间
+  tag: BOOLEAN '逻辑删除标识
+}
+
+entity "user_activity_log" as user_activity_log {
+  '-- 用户活动日志表 (user_activity_log) --
+  + id: BIGSERIAL <<PK>> '主键ID
+  --
+  user_id: VARCHAR(255) '用户ID
+  user_role: VARCHAR(50) '用户角色
+  activity_type: VARCHAR(100) '活动类型
+  target_type: VARCHAR(100) '目标类型
+  target_id: VARCHAR(255) '目标ID
+  details: JSONB '详情
+  activity_time: TIMESTAMP '活动时间
+}
+
+entity "dashboard_analytics" as dashboard_analytics {
+  '-- 仪表盘分析表 (dashboard_analytics) --
+  + id: SERIAL <<PK>> '主键ID
+  --
+  metric_name: VARCHAR(255) '指标名称
+  metric_value: VARCHAR(255) '指标值
+  metric_unit: VARCHAR(50) '指标单位
+  calculation_date: DATE '计算日期
+  scope_type: VARCHAR(50) '范围类型
+  scope_id: VARCHAR(255) '范围ID
+}
+
+' -- 关系 --
+teacher ||--o{ course_teachers : "一个教师可以教多门课程"
+student ||--o{ enrollments : "一个学生可以选修多门课程"
+
+courses ||--o{ enrollments : "一门课程可以有多个学生选修"
+courses ||--o{ course_teachers : "一门课程可以由多个教师讲授"
+courses ||--o{ course_classes : "一门课程可以分配给多个班级"
+courses ||--o{ chapters : "一门课程包含多个章节"
+courses ||--o{ resources : "一门课程包含多个资源"
+courses ||--o{ questions : "一门课程包含多个问题"
+courses ||--o{ discussions : "一门课程可以有多个讨论"
+
+subjects ||--o{ courses : "一个学科下有多门课程"
+
+classes ||--o{ course_classes : "一个班级可以上多门课程"
+
+chapters ||--o{ questions : "一个章节下有多个问题"
+
+' Polymorphic relationships (not drawn):
+' resources.user_id -> admin.id or teacher.id (based on user_role)
+' discussions.user_id -> student.id or teacher.id (based on user_role)
+' user_activity_log.user_id -> admin.id or teacher.id or student.id (based on user_role)
+
+@enduml
+```

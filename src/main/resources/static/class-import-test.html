@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>班级批量导入测试</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        button {
+            padding: 8px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>班级批量导入测试</h1>
+    <p>请上传Excel文件（.xlsx或.xls格式），前两列分别为班级名称和专业ID（不包含表头）</p>
+    
+    <div class="form-group">
+        <label for="excelFile">选择Excel文件：</label>
+        <input type="file" id="excelFile" accept=".xlsx, .xls">
+    </div>
+    
+    <button onclick="uploadFile()">上传并导入</button>
+    
+    <div id="result" class="result"></div>
+    
+    <script>
+        function uploadFile() {
+            const fileInput = document.getElementById('excelFile');
+            const resultDiv = document.getElementById('result');
+            
+            if (!fileInput.files.length) {
+                alert('请选择一个文件');
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            fetch('/api/eduagentx/admin/create/class/excel', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                resultDiv.style.display = 'block';
+                resultDiv.innerHTML = JSON.stringify(data, null, 2);
+            })
+            .catch(error => {
+                resultDiv.style.display = 'block';
+                resultDiv.innerHTML = '上传失败: ' + error.message;
+            });
+        }
+    </script>
+</body>
+</html>

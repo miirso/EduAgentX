@@ -1,0 +1,21 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:postgresql://113.44.198.34:5432/rbjdb # 早晚给这个数据库改名字
+    username: miirso
+    password: miirso
+    driver-class-name: org.postgresql.Driver
+  data:
+    redis:
+      host: 113.44.198.34
+      port: 6379
+      password: miirso # 如果没密码可以删掉这一行
+      lettuce:
+        database: 3  # 这里指定数据库索引，默认是0
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 10MB
