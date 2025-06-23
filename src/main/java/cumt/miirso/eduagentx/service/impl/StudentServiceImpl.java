@@ -72,7 +72,7 @@ public class StudentServiceImpl extends ServiceImpl<StudentMapper, StudentDO> im
 
         // 3. 创建
         StudentDO studentDO = getStudentDO(studentRegisterReqDTO);
-
+        
         // 4. 保存到数据库
         save(studentDO);
         

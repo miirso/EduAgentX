@@ -1,0 +1,16 @@
+{
+    "java.compile.nullAnalysis.mode": "automatic",
+
+    "github.copilot.enable": {
+        "*": true,
+        "yaml": false,
+        "plaintext": false
+    },
+    "github.copilot.chat.welcomeMessage": "always",
+    "github.copilot.chat.localeOverride": "zh-CN",
+    "github.copilot.advanced": {
+        "debug.overrideEngine": "copilot-chat",
+        "inlineSuggestEnable": true
+    }
+    
+}

@@ -1,0 +1,19 @@
+[
+    {
+        "key": "ctrl+shift+i",
+        "command": "github.copilot.interactiveEditor.generate",
+        "when": "editorTextFocus"
+    },
+    {
+        "key": "ctrl+shift+c",
+        "command": "workbench.panel.chatSidebar.copilot"
+    },
+    {
+        "key": "ctrl+alt+c",
+        "command": "workbench.action.chat.open"
+    },
+    {
+        "key": "ctrl+alt+enter",
+        "command": "github.copilot.generate"
+    }
+]
