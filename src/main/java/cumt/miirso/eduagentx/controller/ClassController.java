@@ -39,28 +39,33 @@ public class ClassController {
     public Result<CourseDetailRespDTO> getCourseDetail(@PathVariable("courseId") String courseId) {
         log.info("=== 收到查询课程详细信息请求 ===");
         log.info("课程ID: {}", courseId);
-        
-        try {
+          try {
             CourseDetailRespDTO result = courseService.getCourseDetailById(courseId);
             
             log.info("=== 课程详细信息查询成功 ===");
-            log.info("课程名称: {}, 选课学生数: {}, 分配教师数: {}, 关联班级数: {}", 
-                    result.getName(), 
-                    result.getEnrollmentStats().getTotalEnrollments(),
-                    result.getEnrollmentStats().getTotalTeachers(),
-                    result.getEnrollmentStats().getTotalClasses());
-              return Results.success(result);
+            // 安全地访问统计信息
+            if (result != null && result.getEnrollmentStats() != null) {
+                log.info("课程名称: {}, 选课学生数: {}, 分配教师数: {}, 关联班级数: {}", 
+                        result.getName(), 
+                        result.getEnrollmentStats().getTotalEnrollments(),
+                        result.getEnrollmentStats().getTotalTeachers(),
+                        result.getEnrollmentStats().getTotalClasses());
+            } else {
+                log.warn("查询结果为空或统计信息缺失");
+            }
+            
+            return Results.success(result);
         } catch (RuntimeException e) {
-            log.error("查询课程详细信息失败: {}", e.getMessage());
+            log.error("查询课程详细信息失败（运行时异常）: {}", e.getMessage(), e);
             return new Result<CourseDetailRespDTO>()
                     .setCode("404")
-                    .setMessage(e.getMessage())
+                    .setMessage(e.getMessage() != null ? e.getMessage() : "课程不存在或查询失败")
                     .setData(null);
         } catch (Exception e) {
             log.error("查询课程详细信息出现异常: ", e);
             return new Result<CourseDetailRespDTO>()
                     .setCode("500")
-                    .setMessage("查询课程详细信息失败：" + e.getMessage())
+                    .setMessage("查询课程详细信息失败：" + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()))
                     .setData(null);
         }
     }

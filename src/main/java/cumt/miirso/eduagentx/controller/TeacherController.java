@@ -116,4 +116,114 @@ public class TeacherController {
         Boolean success = teacherService.updatePassword(passwordUpdateReqDTO, request);
         return Results.success(success);
     }
+
+    /**
+     * 教师为课程分配章节
+     * 
+     * 功能说明：
+     * - 校验当前登录用户是否为该课程的教师
+     * - 如果是，允许为课程分配章节信息
+     * - 支持批量插入章节到数据库
+     * 
+     * @param requestParam 章节分配请求参数，包含课程ID和章节列表
+     * @param request HTTP请求（用于获取当前登录教师信息）
+     * @return 章节分配结果
+     */
+    @PostMapping("/assign-chapters")
+    public Result<cumt.miirso.eduagentx.dto.resp.TeacherAssignChaptersRespDTO> assignChaptersToCourse(
+            @RequestBody cumt.miirso.eduagentx.dto.req.TeacherAssignChaptersReqDTO requestParam, 
+            HttpServletRequest request) {
+        
+        cumt.miirso.eduagentx.dto.resp.TeacherAssignChaptersRespDTO result = 
+                teacherService.assignChaptersToCourse(requestParam, request);
+        return Results.success(result);
+    }
+
+    /**
+     * 教师删除课程章节
+     * 
+     * 功能说明：
+     * - 校验当前登录用户是否为该课程的教师
+     * - 根据章节顺序号删除指定章节
+     * - 物理删除章节数据
+     * 
+     * @param requestParam 删除章节请求参数，包含课程ID和章节顺序号
+     * @param request HTTP请求（用于获取当前登录教师信息）
+     * @return 删除章节结果
+     */
+    @DeleteMapping("/delete-chapter")
+    public Result<cumt.miirso.eduagentx.dto.resp.TeacherDeleteChapterRespDTO> deleteChapterFromCourse(
+            @RequestBody cumt.miirso.eduagentx.dto.req.TeacherDeleteChapterReqDTO requestParam, 
+            HttpServletRequest request) {
+        
+        cumt.miirso.eduagentx.dto.resp.TeacherDeleteChapterRespDTO result = 
+                teacherService.deleteChapterFromCourse(requestParam, request);
+        return Results.success(result);
+    }
+
+    /**
+     * 教师修改课程章节
+     * 
+     * 功能说明：
+     * - 校验当前登录用户是否为该课程的教师
+     * - 根据原章节顺序号修改章节信息
+     * - 支持修改章节标题、内容、顺序号
+     * 
+     * @param requestParam 修改章节请求参数，包含课程ID、原章节顺序号和新的章节信息
+     * @param request HTTP请求（用于获取当前登录教师信息）
+     * @return 修改章节结果
+     */
+    @PutMapping("/update-chapter")
+    public Result<cumt.miirso.eduagentx.dto.resp.TeacherUpdateChapterRespDTO> updateChapterOfCourse(
+            @RequestBody cumt.miirso.eduagentx.dto.req.TeacherUpdateChapterReqDTO requestParam, 
+            HttpServletRequest request) {
+        
+        cumt.miirso.eduagentx.dto.resp.TeacherUpdateChapterRespDTO result = 
+                teacherService.updateChapterOfCourse(requestParam, request);
+        return Results.success(result);
+    }
+
+    /**
+     * 教师查询课程章节列表
+     * 
+     * 功能说明：
+     * - 校验当前登录用户是否为该课程的教师
+     * - 查询指定课程的所有章节信息
+     * - 按章节顺序号升序排列
+     * 
+     * @param requestParam 查询章节请求参数，包含课程ID
+     * @param request HTTP请求（用于获取当前登录教师信息）
+     * @return 章节列表结果
+     */
+    @PostMapping("/query-chapters")
+    public Result<cumt.miirso.eduagentx.dto.resp.TeacherQueryChapterRespDTO> queryChaptersOfCourse(
+            @RequestBody cumt.miirso.eduagentx.dto.req.TeacherQueryChapterReqDTO requestParam, 
+            HttpServletRequest request) {
+        
+        cumt.miirso.eduagentx.dto.resp.TeacherQueryChapterRespDTO result = 
+                teacherService.queryChaptersOfCourse(requestParam, request);
+        return Results.success(result);
+    }
+
+    /**
+     * 教师新增课程章节
+     * 
+     * 功能说明：
+     * - 校验当前登录用户是否为该课程的教师
+     * - 验证章节顺序号是否已被使用
+     * - 创建新章节并保存到数据库
+     * 
+     * @param requestParam 新增章节请求参数，包含课程ID、章节标题、内容和顺序号
+     * @param request HTTP请求（用于获取当前登录教师信息）
+     * @return 新增章节结果
+     */
+    @PostMapping("/add-chapter")
+    public Result<cumt.miirso.eduagentx.dto.resp.TeacherAddChapterRespDTO> addChapterToCourse(
+            @RequestBody cumt.miirso.eduagentx.dto.req.TeacherAddChapterReqDTO requestParam, 
+            HttpServletRequest request) {
+        
+        cumt.miirso.eduagentx.dto.resp.TeacherAddChapterRespDTO result = 
+                teacherService.addChapterToCourse(requestParam, request);
+        return Results.success(result);
+    }
 }

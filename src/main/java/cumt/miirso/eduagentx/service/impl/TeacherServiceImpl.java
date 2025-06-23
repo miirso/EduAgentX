@@ -31,6 +31,9 @@ import org.redisson.api.RedissonClient;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -49,6 +52,10 @@ public class TeacherServiceImpl extends ServiceImpl<TeacherMapper, TeacherDO> im
     private final RedissonClient redissonClient;
     
     private final StringRedisTemplate stringRedisTemplate;
+    
+    private final cumt.miirso.eduagentx.mapper.CourseTeacherMapper courseTeacherMapper;
+    
+    private final cumt.miirso.eduagentx.mapper.ChapterMapper chapterMapper;
 
     /**
      * 教师注册
@@ -589,5 +596,447 @@ public class TeacherServiceImpl extends ServiceImpl<TeacherMapper, TeacherDO> im
         dto.setUpdateTime(teacherDO.getUpdateTime());
         
         return dto;
+    }
+
+    /**
+     * 教师为课程分配章节
+     * 
+     * @param requestParam 章节分配请求参数
+     * @param request HTTP请求（用于获取当前登录教师信息）
+     * @return 章节分配响应
+     */
+    @Override
+    public cumt.miirso.eduagentx.dto.resp.TeacherAssignChaptersRespDTO assignChaptersToCourse(
+            cumt.miirso.eduagentx.dto.req.TeacherAssignChaptersReqDTO requestParam, 
+            HttpServletRequest request) {
+        
+        log.info("教师为课程分配章节开始，课程ID: {}, 章节数量: {}", 
+                requestParam.getCourseId(), 
+                requestParam.getChapters() != null ? requestParam.getChapters().size() : 0);
+        
+        // 1. 参数校验
+        if (requestParam.getCourseId() == null || requestParam.getCourseId().trim().isEmpty()) {
+            throw new ClientException("课程ID不能为空");
+        }
+        
+        if (requestParam.getChapters() == null || requestParam.getChapters().isEmpty()) {
+            throw new ClientException("章节列表不能为空");
+        }
+        
+        // 2. 获取当前登录教师ID
+        Long currentTeacherId = getCurrentTeacherId(request);
+        log.info("当前登录教师ID: {}", currentTeacherId);
+        
+        // 3. 校验教师是否为该课程的教师
+        boolean isTeacherOfCourse = checkTeacherCoursePermission(currentTeacherId, requestParam.getCourseId());
+        if (!isTeacherOfCourse) {
+            log.error("教师ID {} 不是课程 {} 的教师，无权分配章节", currentTeacherId, requestParam.getCourseId());
+            throw new ClientException("您不是该课程的教师，无权分配章节");
+        }
+        
+        // 4. 批量插入章节信息
+        int assignedCount = insertChapters(requestParam.getCourseId(), requestParam.getChapters());
+        
+        log.info("章节分配完成，课程ID: {}, 成功分配章节数: {}", requestParam.getCourseId(), assignedCount);
+        
+        return cumt.miirso.eduagentx.dto.resp.TeacherAssignChaptersRespDTO.builder()
+                .courseId(requestParam.getCourseId())
+                .assignedChapterCount(assignedCount)
+                .message("章节分配成功")
+                .build();
+    }
+
+    /**
+     * 获取当前登录教师ID
+     */
+    private Long getCurrentTeacherId(HttpServletRequest request) {
+        // 获取token
+        String token = getTokenFromRequest(request);
+        
+        if (token == null || token.isEmpty() || "undefined".equals(token)) {
+            log.error("无法获取有效的token");
+            throw new ClientException(TeacherErrorCode.TEACHER_NOT_LOGIN);
+        }
+        
+        // 从Redis获取用户名
+        String tokenKey = RedisCacheConstant.LOGIN_USER_KEY + token;
+        String username = stringRedisTemplate.opsForValue().get(tokenKey);
+        
+        if (username == null) {
+            throw new ClientException(TeacherErrorCode.TEACHER_NOT_LOGIN);
+        }
+        
+        // 根据用户名查询教师信息
+        TeacherDO teacher = lambdaQuery()
+                .eq(TeacherDO::getUsername, username)
+                .one();
+          if (teacher == null) {
+            throw new ClientException(TeacherErrorCode.TEACHER_NULL);
+        }
+        
+        return teacher.getId();
+    }
+
+    /**
+     * 从请求中获取token
+     */
+    private String getTokenFromRequest(HttpServletRequest request) {
+        String token = null;
+        
+        // 1. 尝试从标准请求头获取
+        token = request.getHeader("authorization");
+        log.debug("从authorization获取的token: {}", token);
+        
+        // 2. 如果为空，尝试从查询参数获取
+        if (token == null || token.isEmpty()) {
+            token = request.getParameter("token");
+            log.debug("从查询参数获取的token: {}", token);
+        }
+        
+        // 3. 如果为空，尝试从cookie获取
+        if (token == null || token.isEmpty()) {
+            jakarta.servlet.http.Cookie[] cookies = request.getCookies();
+            if (cookies != null) {
+                for (jakarta.servlet.http.Cookie cookie : cookies) {
+                    if ("token".equals(cookie.getName()) || "authorization".equals(cookie.getName())) {
+                        token = cookie.getValue();
+                        log.debug("从cookie获取的token: {}", token);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        return token;
+    }    /**
+     * 检查教师是否为该课程的教师
+     */
+    private boolean checkTeacherCoursePermission(Long teacherId, String courseId) {
+        // 查询course_teachers表
+        LambdaQueryWrapper<cumt.miirso.eduagentx.entity.CourseTeacherDO> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(cumt.miirso.eduagentx.entity.CourseTeacherDO::getTeacherId, teacherId.toString())
+               .eq(cumt.miirso.eduagentx.entity.CourseTeacherDO::getCourseId, courseId);
+        
+        long count = courseTeacherMapper.selectCount(wrapper);
+        return count > 0;
+    }
+
+    /**
+     * 批量插入章节信息
+     */
+    private int insertChapters(String courseId, List<cumt.miirso.eduagentx.dto.req.TeacherAssignChaptersReqDTO.ChapterInfo> chapters) {
+        int insertedCount = 0;
+        
+        for (cumt.miirso.eduagentx.dto.req.TeacherAssignChaptersReqDTO.ChapterInfo chapterInfo : chapters) {
+            cumt.miirso.eduagentx.entity.ChapterDO chapterDO = new cumt.miirso.eduagentx.entity.ChapterDO();
+            chapterDO.setCourseId(courseId);
+            chapterDO.setTitle(chapterInfo.getTitle());
+            chapterDO.setContent(chapterInfo.getContent());
+            chapterDO.setOrder(chapterInfo.getOrder());
+            
+            int result = chapterMapper.insert(chapterDO);
+            if (result > 0) {
+                insertedCount++;
+            }
+        }
+        
+        return insertedCount;
+    }
+
+    /**
+     * 教师删除课程章节
+     * 
+     * @param requestParam 删除章节请求参数
+     * @param request HTTP请求（用于获取当前登录教师信息）
+     * @return 删除章节响应
+     */
+    @Override
+    public cumt.miirso.eduagentx.dto.resp.TeacherDeleteChapterRespDTO deleteChapterFromCourse(
+            cumt.miirso.eduagentx.dto.req.TeacherDeleteChapterReqDTO requestParam,
+            HttpServletRequest request) {
+        
+        log.info("教师删除课程章节开始，课程ID: {}, 章节顺序: {}", 
+                requestParam.getCourseId(), requestParam.getOrder());
+        
+        // 1. 参数校验
+        if (requestParam.getCourseId() == null || requestParam.getCourseId().trim().isEmpty()) {
+            throw new ClientException("课程ID不能为空");
+        }
+        
+        if (requestParam.getOrder() == null) {
+            throw new ClientException("章节顺序号不能为空");
+        }
+        
+        // 2. 获取当前登录教师ID
+        Long currentTeacherId = getCurrentTeacherId(request);
+        log.info("当前登录教师ID: {}", currentTeacherId);
+        
+        // 3. 校验教师是否为该课程的教师
+        boolean isTeacherOfCourse = checkTeacherCoursePermission(currentTeacherId, requestParam.getCourseId());
+        if (!isTeacherOfCourse) {
+            log.error("教师ID {} 不是课程 {} 的教师，无权删除章节", currentTeacherId, requestParam.getCourseId());
+            throw new ClientException("您不是该课程的教师，无权删除章节");
+        }
+        
+        // 4. 删除章节
+        LambdaQueryWrapper<cumt.miirso.eduagentx.entity.ChapterDO> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(cumt.miirso.eduagentx.entity.ChapterDO::getCourseId, requestParam.getCourseId())
+               .eq(cumt.miirso.eduagentx.entity.ChapterDO::getOrder, requestParam.getOrder());
+        
+        int deletedCount = chapterMapper.delete(wrapper);
+        
+        if (deletedCount == 0) {
+            throw new ClientException("未找到指定的章节");
+        }
+        
+        log.info("章节删除完成，课程ID: {}, 章节顺序: {}, 删除数量: {}", 
+                requestParam.getCourseId(), requestParam.getOrder(), deletedCount);
+        
+        return cumt.miirso.eduagentx.dto.resp.TeacherDeleteChapterRespDTO.builder()
+                .courseId(requestParam.getCourseId())
+                .order(requestParam.getOrder())
+                .message("章节删除成功")
+                .build();
+    }
+
+    /**
+     * 教师修改课程章节
+     * 
+     * @param requestParam 修改章节请求参数
+     * @param request HTTP请求（用于获取当前登录教师信息）
+     * @return 修改章节响应
+     */
+    @Override
+    public cumt.miirso.eduagentx.dto.resp.TeacherUpdateChapterRespDTO updateChapterOfCourse(
+            cumt.miirso.eduagentx.dto.req.TeacherUpdateChapterReqDTO requestParam,
+            HttpServletRequest request) {
+        
+        log.info("教师修改课程章节开始，课程ID: {}, 原章节顺序: {}, 新章节顺序: {}", 
+                requestParam.getCourseId(), requestParam.getOriginalOrder(), requestParam.getNewOrder());
+        
+        // 1. 参数校验
+        if (requestParam.getCourseId() == null || requestParam.getCourseId().trim().isEmpty()) {
+            throw new ClientException("课程ID不能为空");
+        }
+        
+        if (requestParam.getOriginalOrder() == null) {
+            throw new ClientException("原章节顺序号不能为空");
+        }
+        
+        // 2. 获取当前登录教师ID
+        Long currentTeacherId = getCurrentTeacherId(request);
+        log.info("当前登录教师ID: {}", currentTeacherId);
+        
+        // 3. 校验教师是否为该课程的教师
+        boolean isTeacherOfCourse = checkTeacherCoursePermission(currentTeacherId, requestParam.getCourseId());
+        if (!isTeacherOfCourse) {
+            log.error("教师ID {} 不是课程 {} 的教师，无权修改章节", currentTeacherId, requestParam.getCourseId());
+            throw new ClientException("您不是该课程的教师，无权修改章节");
+        }
+        
+        // 4. 检查原章节是否存在
+        LambdaQueryWrapper<cumt.miirso.eduagentx.entity.ChapterDO> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(cumt.miirso.eduagentx.entity.ChapterDO::getCourseId, requestParam.getCourseId())
+                   .eq(cumt.miirso.eduagentx.entity.ChapterDO::getOrder, requestParam.getOriginalOrder());
+        
+        cumt.miirso.eduagentx.entity.ChapterDO existingChapter = chapterMapper.selectOne(queryWrapper);
+        if (existingChapter == null) {
+            throw new ClientException("未找到指定的章节");
+        }
+        
+        // 5. 如果新的顺序号与其他章节冲突，需要检查
+        if (requestParam.getNewOrder() != null && !requestParam.getNewOrder().equals(requestParam.getOriginalOrder())) {
+            LambdaQueryWrapper<cumt.miirso.eduagentx.entity.ChapterDO> conflictWrapper = new LambdaQueryWrapper<>();
+            conflictWrapper.eq(cumt.miirso.eduagentx.entity.ChapterDO::getCourseId, requestParam.getCourseId())
+                          .eq(cumt.miirso.eduagentx.entity.ChapterDO::getOrder, requestParam.getNewOrder());
+            
+            cumt.miirso.eduagentx.entity.ChapterDO conflictChapter = chapterMapper.selectOne(conflictWrapper);
+            if (conflictChapter != null) {
+                throw new ClientException("新的章节顺序号已被其他章节使用");
+            }
+        }
+        
+        // 6. 更新章节信息
+        cumt.miirso.eduagentx.entity.ChapterDO updateChapter = new cumt.miirso.eduagentx.entity.ChapterDO();
+        updateChapter.setId(existingChapter.getId());
+        
+        if (requestParam.getTitle() != null) {
+            updateChapter.setTitle(requestParam.getTitle());
+        }
+        if (requestParam.getContent() != null) {
+            updateChapter.setContent(requestParam.getContent());
+        }
+        if (requestParam.getNewOrder() != null) {
+            updateChapter.setOrder(requestParam.getNewOrder());
+        }
+        
+        int updatedCount = chapterMapper.updateById(updateChapter);
+        
+        if (updatedCount == 0) {
+            throw new ClientException("章节更新失败");
+        }
+        
+        Integer finalOrder = requestParam.getNewOrder() != null ? requestParam.getNewOrder() : requestParam.getOriginalOrder();
+        
+        log.info("章节修改完成，课程ID: {}, 最终章节顺序: {}", requestParam.getCourseId(), finalOrder);
+        
+        return cumt.miirso.eduagentx.dto.resp.TeacherUpdateChapterRespDTO.builder()
+                .courseId(requestParam.getCourseId())
+                .order(finalOrder)
+                .message("章节修改成功")
+                .build();
+    }
+
+    /**
+     * 教师查询课程章节
+     * 
+     * @param requestParam 查询章节请求参数
+     * @param request HTTP请求（用于获取当前登录教师信息）
+     * @return 章节列表响应
+     */
+    @Override
+    public cumt.miirso.eduagentx.dto.resp.TeacherQueryChapterRespDTO queryChaptersOfCourse(
+            cumt.miirso.eduagentx.dto.req.TeacherQueryChapterReqDTO requestParam,
+            HttpServletRequest request) {
+        
+        log.info("教师查询课程章节开始，课程ID: {}", requestParam.getCourseId());
+        
+        // 1. 参数校验
+        if (requestParam.getCourseId() == null || requestParam.getCourseId().trim().isEmpty()) {
+            throw new ClientException("课程ID不能为空");
+        }
+        
+        // // 2. 获取当前登录教师ID
+        // Long currentTeacherId = getCurrentTeacherId(request);
+        // log.info("当前登录教师ID: {}", currentTeacherId);
+        //
+        // // 3. 校验教师是否为该课程的教师
+        // boolean isTeacherOfCourse = checkTeacherCoursePermission(currentTeacherId, requestParam.getCourseId());
+        // if (!isTeacherOfCourse) {
+        //     log.error("教师ID {} 不是课程 {} 的教师，无权查询章节", currentTeacherId, requestParam.getCourseId());
+        //     throw new ClientException("您不是该课程的教师，无权查询章节");
+        // }
+        
+        // 4. 查询章节列表
+        LambdaQueryWrapper<cumt.miirso.eduagentx.entity.ChapterDO> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(cumt.miirso.eduagentx.entity.ChapterDO::getCourseId, requestParam.getCourseId())
+               .orderByAsc(cumt.miirso.eduagentx.entity.ChapterDO::getOrder);
+        
+        List<cumt.miirso.eduagentx.entity.ChapterDO> chapters = chapterMapper.selectList(wrapper);
+          // 5. 转换为响应DTO
+        List<cumt.miirso.eduagentx.dto.resp.TeacherQueryChapterRespDTO.ChapterInfo> chapterInfoList = 
+                chapters.stream().map(chapter -> {
+                    cumt.miirso.eduagentx.dto.resp.TeacherQueryChapterRespDTO.ChapterInfo.ChapterInfoBuilder builder = 
+                        cumt.miirso.eduagentx.dto.resp.TeacherQueryChapterRespDTO.ChapterInfo.builder()
+                            .id(chapter.getId())
+                            .title(chapter.getTitle())
+                            .content(chapter.getContent())
+                            .order(chapter.getOrder());
+                    
+                    // 安全的时间类型转换
+                    if (chapter.getCreateTime() != null) {
+                        builder.createTime(dateToLocalDateTime(chapter.getCreateTime()));
+                    }
+                    if (chapter.getUpdateTime() != null) {
+                        builder.updateTime(dateToLocalDateTime(chapter.getUpdateTime()));
+                    }
+                    
+                    return builder.build();
+                }).collect(java.util.stream.Collectors.toList());
+        
+        log.info("章节查询完成，课程ID: {}, 章节数量: {}", requestParam.getCourseId(), chapterInfoList.size());
+        
+        return cumt.miirso.eduagentx.dto.resp.TeacherQueryChapterRespDTO.builder()
+                .courseId(requestParam.getCourseId())
+                .chapters(chapterInfoList)
+                .totalCount(chapterInfoList.size())
+                .build();
+    }
+    
+    /**
+     * 将Date转换为LocalDateTime的辅助方法
+     * 
+     * @param date 需要转换的Date对象
+     * @return LocalDateTime对象，如果输入为null则返回null
+     */
+    private LocalDateTime dateToLocalDateTime(Date date) {
+        if (date == null) {
+            return null;
+        }
+        return date.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
+    }
+
+    /**
+     * 教师新增课程章节
+     * 
+     * @param requestParam 新增章节请求参数
+     * @param request HTTP请求（用于获取当前登录教师信息）
+     * @return 新增章节响应
+     */
+    @Override
+    public cumt.miirso.eduagentx.dto.resp.TeacherAddChapterRespDTO addChapterToCourse(
+            cumt.miirso.eduagentx.dto.req.TeacherAddChapterReqDTO requestParam,
+            HttpServletRequest request) {
+        
+        log.info("教师新增课程章节开始，课程ID: {}, 章节标题: {}, 章节顺序: {}", 
+                requestParam.getCourseId(), requestParam.getTitle(), requestParam.getOrder());
+        
+        // 1. 参数校验
+        if (requestParam.getCourseId() == null || requestParam.getCourseId().trim().isEmpty()) {
+            throw new ClientException("课程ID不能为空");
+        }
+        
+        if (requestParam.getTitle() == null || requestParam.getTitle().trim().isEmpty()) {
+            throw new ClientException("章节标题不能为空");
+        }
+        
+        if (requestParam.getOrder() == null) {
+            throw new ClientException("章节顺序号不能为空");
+        }
+        
+        // 2. 获取当前登录教师ID
+        Long currentTeacherId = getCurrentTeacherId(request);
+        log.info("当前登录教师ID: {}", currentTeacherId);
+        
+        // 3. 校验教师是否为该课程的教师
+        boolean isTeacherOfCourse = checkTeacherCoursePermission(currentTeacherId, requestParam.getCourseId());
+        if (!isTeacherOfCourse) {
+            log.error("教师ID {} 不是课程 {} 的教师，无权新增章节", currentTeacherId, requestParam.getCourseId());
+            throw new ClientException("您不是该课程的教师，无权新增章节");
+        }
+        
+        // 4. 检查章节顺序是否已存在
+        LambdaQueryWrapper<cumt.miirso.eduagentx.entity.ChapterDO> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(cumt.miirso.eduagentx.entity.ChapterDO::getCourseId, requestParam.getCourseId())
+                   .eq(cumt.miirso.eduagentx.entity.ChapterDO::getOrder, requestParam.getOrder());
+        
+        cumt.miirso.eduagentx.entity.ChapterDO existingChapter = chapterMapper.selectOne(queryWrapper);
+        if (existingChapter != null) {
+            throw new ClientException("该章节顺序号已被使用，请选择其他顺序号");
+        }
+        
+        // 5. 创建新章节
+        cumt.miirso.eduagentx.entity.ChapterDO newChapter = new cumt.miirso.eduagentx.entity.ChapterDO();
+        newChapter.setCourseId(requestParam.getCourseId());
+        newChapter.setTitle(requestParam.getTitle().trim());
+        newChapter.setContent(requestParam.getContent());
+        newChapter.setOrder(requestParam.getOrder());
+        
+        int insertResult = chapterMapper.insert(newChapter);
+        
+        if (insertResult == 0) {
+            throw new ClientException("章节创建失败");
+        }
+        
+        log.info("章节新增完成，课程ID: {}, 章节ID: {}, 章节顺序: {}", 
+                requestParam.getCourseId(), newChapter.getId(), requestParam.getOrder());
+        
+        return cumt.miirso.eduagentx.dto.resp.TeacherAddChapterRespDTO.builder()
+                .courseId(requestParam.getCourseId())
+                .chapterId(newChapter.getId())
+                .title(requestParam.getTitle().trim())
+                .order(requestParam.getOrder())
+                .message("章节新增成功")
+                .build();
     }
 }

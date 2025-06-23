@@ -17,15 +17,12 @@ public class CourseClassDO {
      * 主键
      */
     @TableId(type = IdType.AUTO)
-    private Long id;
-
-    /**
+    private Long id;    /**
      * 课程ID
      */
-    private String courseId;
-
-    /**
-     * 班级ID
+    private String courseId;    /**
+     * 班级名称 (如：计算机科学与技术22-1班)
+     * 对应 student 表中的 class_code 和 classes 表中的 name
      */
-    private Long classId;
+    private String className;
 }

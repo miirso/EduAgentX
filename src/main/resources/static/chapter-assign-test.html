@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>教师章节分配测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .chapter-item {
+            border: 1px solid #eee;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>教师为课程分配章节测试</h1>
+    
+    <form id="assignChaptersForm">
+        <div class="form-group">
+            <label for="token">Token (教师登录后的token):</label>
+            <input type="text" id="token" name="token" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="courseId">课程ID:</label>
+            <input type="text" id="courseId" name="courseId" required>
+        </div>
+        
+        <h3>章节列表</h3>
+        <div id="chaptersContainer">
+            <div class="chapter-item">
+                <div class="form-group">
+                    <label>章节标题:</label>
+                    <input type="text" name="chapter_title" required>
+                </div>
+                <div class="form-group">
+                    <label>章节内容:</label>
+                    <textarea name="chapter_content" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>章节顺序:</label>
+                    <input type="number" name="chapter_order" min="1" required>
+                </div>
+                <button type="button" onclick="removeChapter(this)">删除章节</button>
+            </div>
+        </div>
+        
+        <button type="button" onclick="addChapter()">添加章节</button>
+        <button type="submit">分配章节</button>
+    </form>
+    
+    <div id="response"></div>
+    
+    <script>
+        function addChapter() {
+            const container = document.getElementById('chaptersContainer');
+            const chapterItem = document.createElement('div');
+            chapterItem.className = 'chapter-item';
+            chapterItem.innerHTML = `
+                <div class="form-group">
+                    <label>章节标题:</label>
+                    <input type="text" name="chapter_title" required>
+                </div>
+                <div class="form-group">
+                    <label>章节内容:</label>
+                    <textarea name="chapter_content" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>章节顺序:</label>
+                    <input type="number" name="chapter_order" min="1" required>
+                </div>
+                <button type="button" onclick="removeChapter(this)">删除章节</button>
+            `;
+            container.appendChild(chapterItem);
+        }
+        
+        function removeChapter(button) {
+            const chapterItem = button.closest('.chapter-item');
+            chapterItem.remove();
+        }
+        
+        document.getElementById('assignChaptersForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const token = document.getElementById('token').value;
+            const courseId = document.getElementById('courseId').value;
+            
+            // 收集章节信息
+            const chapters = [];
+            const chapterItems = document.querySelectorAll('.chapter-item');
+            
+            chapterItems.forEach(item => {
+                const title = item.querySelector('input[name="chapter_title"]').value;
+                const content = item.querySelector('textarea[name="chapter_content"]').value;
+                const order = parseInt(item.querySelector('input[name="chapter_order"]').value);
+                
+                if (title) {
+                    chapters.push({
+                        title: title,
+                        content: content,
+                        order: order
+                    });
+                }
+            });
+            
+            if (chapters.length === 0) {
+                alert('请至少添加一个章节');
+                return;
+            }
+            
+            const requestData = {
+                courseId: courseId,
+                chapters: chapters
+            };
+            
+            try {
+                const response = await fetch('/api/eduagentx/teacher/assign-chapters', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': token
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                const result = await response.json();
+                
+                const responseDiv = document.getElementById('response');
+                if (result.code === '0') {
+                    responseDiv.className = 'response success';
+                    responseDiv.innerHTML = `
+                        <h3>分配成功</h3>
+                        <p>课程ID: ${result.data.courseId}</p>
+                        <p>分配章节数: ${result.data.assignedChapterCount}</p>
+                        <p>消息: ${result.data.message}</p>
+                    `;
+                } else {
+                    responseDiv.className = 'response error';
+                    responseDiv.innerHTML = `
+                        <h3>分配失败</h3>
+                        <p>错误代码: ${result.code}</p>
+                        <p>错误消息: ${result.message}</p>
+                    `;
+                }
+            } catch (error) {
+                const responseDiv = document.getElementById('response');
+                responseDiv.className = 'response error';
+                responseDiv.innerHTML = `
+                    <h3>请求失败</h3>
+                    <p>错误: ${error.message}</p>
+                `;
+            }
+        });
+    </script>
+</body>
+</html>

@@ -129,4 +129,30 @@ public interface AdminService extends IService<AdminDO> {
      * @return 选课结果，包含成功选课学生数量、已选学生数量等详细信息
      */
     cumt.miirso.eduagentx.dto.resp.ClassEnrollCourseRespDTO enrollClassToCourse(cumt.miirso.eduagentx.dto.req.ClassEnrollCourseReqDTO requestParam);
+      /**
+     * 管理员按班级名称批量退课
+     * 
+     * 功能说明：
+     * - 根据班级名称查找该班级的所有学生
+     * - 物理删除学生的选课记录（enrollments表）
+     * - 物理删除课程-班级关联记录（course_classes表）
+     * - 返回详细的退课结果统计
+     * 
+     * @param requestParam 班级退课请求参数，包含班级名称和课程ID
+     * @return 退课结果，包含成功退课学生数量、未选课学生数量等详细信息
+     */
+    cumt.miirso.eduagentx.dto.resp.ClassUnenrollCourseRespDTO unenrollClassFromCourse(cumt.miirso.eduagentx.dto.req.ClassUnenrollCourseReqDTO requestParam);
+
+    /**
+     * 管理员为教师从课程中退课（删除教师-课程关联）
+     * 
+     * 功能说明：
+     * - 根据教师ID和课程ID删除课程-教师关联记录
+     * - 物理删除课程-教师关联表（course_teachers）中的记录
+     * - 返回详细的退课操作结果
+     * 
+     * @param requestParam 教师退课请求参数，包含教师ID和课程ID
+     * @return 退课结果，包含操作是否成功、删除的记录数量等详细信息
+     */
+    cumt.miirso.eduagentx.dto.resp.TeacherUnassignCourseRespDTO unassignTeacherFromCourse(cumt.miirso.eduagentx.dto.req.TeacherUnassignCourseReqDTO requestParam);
 }

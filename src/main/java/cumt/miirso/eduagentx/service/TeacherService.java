@@ -97,4 +97,59 @@ public interface TeacherService extends IService<TeacherDO> {
      * @return 分页查询结果
      */
     TeacherPageQueryRespDTO pageQueryTeachers(TeacherPageQueryReqDTO requestParam);
+
+    /**
+     * 教师为课程分配章节
+     * 
+     * @param requestParam 章节分配请求参数
+     * @param request HTTP请求（用于获取当前登录教师信息）
+     * @return 章节分配响应
+     */
+    cumt.miirso.eduagentx.dto.resp.TeacherAssignChaptersRespDTO assignChaptersToCourse(
+            cumt.miirso.eduagentx.dto.req.TeacherAssignChaptersReqDTO requestParam, 
+            HttpServletRequest request);
+
+    /**
+     * 教师删除课程章节
+     * 
+     * @param requestParam 删除章节请求参数
+     * @param request HTTP请求（用于获取当前登录教师信息）
+     * @return 删除章节响应
+     */
+    cumt.miirso.eduagentx.dto.resp.TeacherDeleteChapterRespDTO deleteChapterFromCourse(
+            cumt.miirso.eduagentx.dto.req.TeacherDeleteChapterReqDTO requestParam,
+            HttpServletRequest request);
+
+    /**
+     * 教师修改课程章节
+     * 
+     * @param requestParam 修改章节请求参数
+     * @param request HTTP请求（用于获取当前登录教师信息）
+     * @return 修改章节响应
+     */
+    cumt.miirso.eduagentx.dto.resp.TeacherUpdateChapterRespDTO updateChapterOfCourse(
+            cumt.miirso.eduagentx.dto.req.TeacherUpdateChapterReqDTO requestParam,
+            HttpServletRequest request);
+
+    /**
+     * 教师查询课程章节
+     * 
+     * @param requestParam 查询章节请求参数
+     * @param request HTTP请求（用于获取当前登录教师信息）
+     * @return 章节列表响应
+     */
+    cumt.miirso.eduagentx.dto.resp.TeacherQueryChapterRespDTO queryChaptersOfCourse(
+            cumt.miirso.eduagentx.dto.req.TeacherQueryChapterReqDTO requestParam,
+            HttpServletRequest request);
+
+    /**
+     * 教师新增课程章节
+     * 
+     * @param requestParam 新增章节请求参数
+     * @param request HTTP请求（用于获取当前登录教师信息）
+     * @return 新增章节响应
+     */
+    cumt.miirso.eduagentx.dto.resp.TeacherAddChapterRespDTO addChapterToCourse(
+            cumt.miirso.eduagentx.dto.req.TeacherAddChapterReqDTO requestParam,
+            HttpServletRequest request);
 }

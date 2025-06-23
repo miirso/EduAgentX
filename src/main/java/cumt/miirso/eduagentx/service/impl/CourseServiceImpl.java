@@ -31,6 +31,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -84,7 +85,8 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, CourseDO> imple
         
         log.info("教师[{}]成功创建课程[{}:{}]", teacherId, courseId, requestParam.getName());
     }
-      /**
+
+    /**
      * 生成课程ID
      * @param subjectId 学科ID
      * @param type 课程类型
@@ -102,7 +104,8 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, CourseDO> imple
         // 拼接：前2位学科ID + 5位序号 + 1位类型
         return subjectPrefix + sequenceStr + type.toUpperCase();
     }
-      /**
+
+    /**
      * 从请求中获取当前登录教师ID
      * @param request HTTP请求
      * @return 教师ID
@@ -187,7 +190,8 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, CourseDO> imple
      * 
      * @param requestParam 分页查询请求参数
      * @return 分页查询结果
-     */    @Override
+     */
+    @Override
     public CoursePageQueryRespDTO pageQueryCourses(CoursePageQueryReqDTO requestParam) {
         log.info("=== 开始执行课程分页查询 ===");
         log.info("原始参数: {}", requestParam);
@@ -358,80 +362,119 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, CourseDO> imple
         respDTO.setSubjectId(courseDO.getSubjectId());        respDTO.setName(courseDO.getName());
         respDTO.setDescription(courseDO.getDescription());
         respDTO.setCoverImage(courseDO.getCoverImage());
+        
+        // 安全的日期转换，兼容 java.sql.Date 和 java.util.Date
         respDTO.setStartDate(courseDO.getStartDate() != null ? 
-                courseDO.getStartDate().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate() : null);
+                convertDateToLocalDate(courseDO.getStartDate()) : null);
         respDTO.setEndDate(courseDO.getEndDate() != null ? 
-                courseDO.getEndDate().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate() : null);
+                convertDateToLocalDate(courseDO.getEndDate()) : null);
+                
         respDTO.setAssessmentMethod(courseDO.getAssessmentMethod());
         respDTO.setType(courseDO.getType());
+        
+        // 安全的时间转换
         respDTO.setCreateTime(courseDO.getCreateTime() != null ? 
-                courseDO.getCreateTime().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime() : null);
+                convertDateToLocalDateTime(courseDO.getCreateTime()) : null);
         respDTO.setUpdateTime(courseDO.getUpdateTime() != null ? 
-                courseDO.getUpdateTime().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime() : null);
-        respDTO.setAssignedTeachers(assignedTeachers);
+                convertDateToLocalDateTime(courseDO.getUpdateTime()) : null);respDTO.setAssignedTeachers(assignedTeachers);
         respDTO.setAssignedClasses(assignedClasses);
         respDTO.setEnrollmentStats(enrollmentStats);
         
         log.info("=== 课程详细信息查询完成 ===");
-        log.info("返回结果: {}", respDTO);
+        // 不直接打印整个对象，避免可能的toString()异常
+        log.info("返回结果构建完成，课程ID: {}, 名称: {}", respDTO.getId(), respDTO.getName());
         
         return respDTO;
     }
     
     /**
      * 查询课程分配的教师列表
-     */
-    private List<CourseDetailRespDTO.AssignedTeacherInfo> getAssignedTeachers(String courseId) {
-        List<CourseTeacherDO> courseTeachers = courseTeacherMapper.selectList(
-                new LambdaQueryWrapper<CourseTeacherDO>()
-                        .eq(CourseTeacherDO::getCourseId, courseId)
-        );
-        
-        return courseTeachers.stream()
-                .map(ct -> {
-                    TeacherDO teacher = teacherMapper.selectById(ct.getTeacherId());                    if (teacher != null && teacher.getTag()) {
-                        CourseDetailRespDTO.AssignedTeacherInfo info = new CourseDetailRespDTO.AssignedTeacherInfo();
-                        info.setTeacherId(teacher.getId().toString());
-                        info.setTeacherName(teacher.getRealName());
-                        info.setTeacherNo(teacher.getTeacherNo());
-                        info.setCollege(teacher.getCollege());
-                        return info;
-                    }
-                    return null;
-                })
-                .filter(info -> info != null)
-                .toList();
+     */    private List<CourseDetailRespDTO.AssignedTeacherInfo> getAssignedTeachers(String courseId) {
+        try {
+            List<CourseTeacherDO> courseTeachers = courseTeacherMapper.selectList(
+                    new LambdaQueryWrapper<CourseTeacherDO>()
+                            .eq(CourseTeacherDO::getCourseId, courseId)
+            );
+            
+            log.info("查询到 {} 个教师-课程关联记录", courseTeachers.size());
+            
+            return courseTeachers.stream()
+                    .map(ct -> {
+                        try {
+                            TeacherDO teacher = teacherMapper.selectById(ct.getTeacherId());
+                            if (teacher != null && teacher.getTag() && teacher.getId() != null) {
+                                CourseDetailRespDTO.AssignedTeacherInfo info = new CourseDetailRespDTO.AssignedTeacherInfo();
+                                info.setTeacherId(teacher.getId().toString());
+                                info.setTeacherName(teacher.getRealName());
+                                info.setTeacherNo(teacher.getTeacherNo());
+                                info.setCollege(teacher.getCollege());
+                                return info;
+                            } else {
+                                log.warn("教师不存在或已被删除: {}", ct.getTeacherId());
+                            }
+                        } catch (Exception e) {
+                            log.error("查询教师信息失败: {}", ct.getTeacherId(), e);
+                        }
+                        return null;
+                    })
+                    .filter(info -> info != null)
+                    .toList();
+        } catch (Exception e) {
+            log.error("查询课程分配教师失败", e);
+            return new ArrayList<>();
+        }
     }
-    
-    /**
+      /**
      * 查询课程关联的班级列表
-     */
-    private List<CourseDetailRespDTO.AssignedClassInfo> getAssignedClasses(String courseId) {
-        List<CourseClassDO> courseClasses = courseClassMapper.selectList(
-                new LambdaQueryWrapper<CourseClassDO>()
-                        .eq(CourseClassDO::getCourseId, courseId)
-        );
-        
-        return courseClasses.stream()
-                .map(cc -> {
-                    ClassDO classDO = classMapper.selectById(cc.getClassId());
-                    if (classDO != null && classDO.getTag()) {
-                        CourseDetailRespDTO.AssignedClassInfo info = new CourseDetailRespDTO.AssignedClassInfo();
-                        info.setClassId(classDO.getId());
-                        info.setClassName(classDO.getName());
-                        info.setMajorId(classDO.getMajorId());
-                        return info;
-                    }
-                    return null;
-                })
-                .filter(info -> info != null)
-                .toList();
+     */    private List<CourseDetailRespDTO.AssignedClassInfo> getAssignedClasses(String courseId) {
+        try {
+            List<CourseClassDO> courseClasses = courseClassMapper.selectList(
+                    new LambdaQueryWrapper<CourseClassDO>()
+                            .eq(CourseClassDO::getCourseId, courseId)
+            );
+            
+            log.info("查询到 {} 个班级-课程关联记录", courseClasses.size());
+            
+            return courseClasses.stream()
+                    .map(cc -> {
+                        try {
+                            // 现在 class_name 存储的是班级名称，根据班级名称查找班级信息
+                            ClassDO classDO = classMapper.selectOne(
+                                    new LambdaQueryWrapper<ClassDO>()
+                                            .eq(ClassDO::getName, cc.getClassName())
+                                            .eq(ClassDO::getTag, true)
+                            );
+                            if (classDO != null) {
+                                CourseDetailRespDTO.AssignedClassInfo info = new CourseDetailRespDTO.AssignedClassInfo();
+                                info.setClassId(classDO.getId());
+                                info.setClassName(classDO.getName());
+                                info.setMajorId(classDO.getMajorId());
+                                return info;
+                            } else {
+                                // 如果在 classes 表中找不到对应记录，直接使用班级名称
+                                log.warn("在classes表中未找到班级: {}", cc.getClassName());
+                                CourseDetailRespDTO.AssignedClassInfo info = new CourseDetailRespDTO.AssignedClassInfo();
+                                info.setClassId(null); // 没有对应的数据库ID
+                                info.setClassName(cc.getClassName()); // class_name 现在就是班级名称
+                                info.setMajorId(null);
+                                return info;
+                            }
+                        } catch (Exception e) {
+                            log.error("查询班级信息失败: {}", cc.getClassName(), e);
+                            return null;
+                        }
+                    })
+                    .filter(info -> info != null)
+                    .toList();
+        } catch (Exception e) {
+            log.error("查询课程关联班级失败", e);
+            return new ArrayList<>();
+        }
     }
     
     /**
      * 统计选课信息
-     */
-    private CourseDetailRespDTO.EnrollmentStatistics getEnrollmentStatistics(String courseId) {
+     */    private CourseDetailRespDTO.EnrollmentStatistics getEnrollmentStatistics(String courseId) {
         // 统计选课学生总数
         Long totalEnrollments = enrollmentMapper.selectCount(
                 new LambdaQueryWrapper<EnrollmentDO>()
@@ -450,12 +493,47 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, CourseDO> imple
                 new LambdaQueryWrapper<CourseTeacherDO>()
                         .eq(CourseTeacherDO::getCourseId, courseId)
         );
-        
-        CourseDetailRespDTO.EnrollmentStatistics stats = new CourseDetailRespDTO.EnrollmentStatistics();
-        stats.setTotalEnrollments(totalEnrollments.intValue());
-        stats.setTotalClasses(totalClasses.intValue());
-        stats.setTotalTeachers(totalTeachers.intValue());
+          CourseDetailRespDTO.EnrollmentStatistics stats = new CourseDetailRespDTO.EnrollmentStatistics();
+        // 安全地转换为int，避免null值异常
+        stats.setTotalEnrollments(totalEnrollments != null ? totalEnrollments.intValue() : 0);
+        stats.setTotalClasses(totalClasses != null ? totalClasses.intValue() : 0);
+        stats.setTotalTeachers(totalTeachers != null ? totalTeachers.intValue() : 0);
         
         return stats;
+    }
+
+    /**
+     * 安全地将 Date 转换为 LocalDate，兼容 java.sql.Date 和 java.util.Date
+     */
+    private java.time.LocalDate convertDateToLocalDate(java.util.Date date) {
+        if (date == null) {
+            return null;
+        }
+        
+        // 如果是 java.sql.Date，直接转换
+        if (date instanceof java.sql.Date) {
+            return ((java.sql.Date) date).toLocalDate();
+        }
+        
+        // 如果是 java.util.Date，通过 Instant 转换
+        return date.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+    }
+
+    /**
+     * 安全地将 Date 转换为 LocalDateTime，兼容 java.sql.Date 和 java.util.Date  
+     */
+    private java.time.LocalDateTime convertDateToLocalDateTime(java.util.Date date) {
+        if (date == null) {
+            return null;
+        }
+        
+        // java.sql.Date 需要先转换为 java.util.Date 或 Timestamp
+        if (date instanceof java.sql.Date) {
+            // java.sql.Date 只包含日期信息，时间部分为 00:00:00
+            return ((java.sql.Date) date).toLocalDate().atStartOfDay();
+        }
+        
+        // 如果是 java.util.Date，通过 Instant 转换
+        return date.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDateTime();
     }
 }

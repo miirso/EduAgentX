@@ -7,17 +7,21 @@ import cumt.miirso.eduagentx.dto.req.AdminLoginReqDTO;
 import cumt.miirso.eduagentx.dto.req.AdminRegisterReqDTO;
 import cumt.miirso.eduagentx.dto.req.ClassCreateReqDTO;
 import cumt.miirso.eduagentx.dto.req.ClassEnrollCourseReqDTO;
+import cumt.miirso.eduagentx.dto.req.ClassUnenrollCourseReqDTO;
 import cumt.miirso.eduagentx.dto.req.CourseTeacherAssignReqDTO;
+import cumt.miirso.eduagentx.dto.req.TeacherUnassignCourseReqDTO;
 import cumt.miirso.eduagentx.dto.req.TeacherPageQueryReqDTO;
 import cumt.miirso.eduagentx.dto.resp.AdminLoginRespDTO;
 import cumt.miirso.eduagentx.dto.resp.AdminRegisterRespDTO;
 import cumt.miirso.eduagentx.dto.resp.ClassEnrollCourseRespDTO;
+import cumt.miirso.eduagentx.dto.resp.ClassUnenrollCourseRespDTO;
 import cumt.miirso.eduagentx.dto.resp.ClassQueryRespDTO;
 import cumt.miirso.eduagentx.dto.resp.CourseImportRespDTO;
 import cumt.miirso.eduagentx.dto.resp.CourseQueryRespDTO;
 import cumt.miirso.eduagentx.dto.resp.CourseTeacherAssignRespDTO;
 import cumt.miirso.eduagentx.dto.resp.StudentInfoRespDTO;
 import cumt.miirso.eduagentx.dto.resp.TeacherPageQueryRespDTO;
+import cumt.miirso.eduagentx.dto.resp.TeacherUnassignCourseRespDTO;
 import cumt.miirso.eduagentx.service.AdminService;
 import cumt.miirso.eduagentx.service.ClassService;
 import cumt.miirso.eduagentx.service.CourseService;
@@ -452,11 +456,49 @@ public class AdminController {    private final AdminService adminService;
      * 
      * @param requestParam 班级选课请求参数，包含班级名称和课程ID
      * @return 选课结果，包含成功选课学生数量、已选学生数量等详细信息
-     */
-    @PostMapping("/enroll-class-to-course")
+     */    @PostMapping("/enroll-class-to-course")
     public Result<ClassEnrollCourseRespDTO> enrollClassToCourse(@RequestBody ClassEnrollCourseReqDTO requestParam) {
         log.info("管理员班级选课请求: {}", requestParam);
         ClassEnrollCourseRespDTO result = adminService.enrollClassToCourse(requestParam);
+        return Results.success(result);
+    }    /**
+     * 管理员班级批量退课接口
+     * 
+     * 根据班级名称，将整个班级的学生从指定课程中退课（物理删除）
+     * 
+     * 功能说明：
+     * - 根据班级名称查找所有学生
+     * - 删除这些学生在指定课程中的选课记录（enrollments表）
+     * - 删除课程-班级关联记录（course_classes表）  
+     * - 返回详细的退课结果统计
+     * 
+     * @param requestParam 班级退课请求参数，包含班级名称和课程ID
+     * @return 退课结果，包含退课学生数量等详细信息
+     */
+    @DeleteMapping("/unenroll-class-from-course")
+    public Result<ClassUnenrollCourseRespDTO> unenrollClassFromCourse(@RequestBody ClassUnenrollCourseReqDTO requestParam) {
+        log.info("管理员班级退课请求: {}", requestParam);
+        ClassUnenrollCourseRespDTO result = adminService.unenrollClassFromCourse(requestParam);
+        return Results.success(result);
+    }
+
+    /**
+     * 管理员教师退课接口
+     * 
+     * 根据教师ID和课程ID，将教师从指定课程中退课（物理删除）
+     * 
+     * 功能说明：
+     * - 根据教师ID和课程ID查找教师-课程关联记录
+     * - 删除教师-课程关联记录（course_teachers表）
+     * - 返回详细的退课结果统计
+     * 
+     * @param requestParam 教师退课请求参数，包含教师ID和课程ID
+     * @return 退课结果，包含操作是否成功、删除记录数量等详细信息
+     */
+    @DeleteMapping("/unassign-teacher-from-course")
+    public Result<TeacherUnassignCourseRespDTO> unassignTeacherFromCourse(@RequestBody TeacherUnassignCourseReqDTO requestParam) {
+        log.info("管理员教师退课请求: {}", requestParam);
+        TeacherUnassignCourseRespDTO result = adminService.unassignTeacherFromCourse(requestParam);
         return Results.success(result);
     }
 }

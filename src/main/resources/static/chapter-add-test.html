@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>教师新增章节测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>教师新增章节测试</h1>
+        
+        <div class="form-group">
+            <label for="token">Token:</label>
+            <input type="text" id="token" placeholder="请输入教师登录token">
+        </div>
+        
+        <div class="form-group">
+            <label for="courseId">课程ID:</label>
+            <input type="text" id="courseId" placeholder="请输入课程ID" value="COURSE001">
+        </div>
+        
+        <div class="form-group">
+            <label for="title">章节标题:</label>
+            <input type="text" id="title" placeholder="请输入章节标题" value="第一章 概述">
+        </div>
+        
+        <div class="form-group">
+            <label for="content">章节内容:</label>
+            <textarea id="content" placeholder="请输入章节内容">这是第一章的内容，主要介绍课程的基本概念和学习目标。</textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="order">章节顺序:</label>
+            <input type="number" id="order" placeholder="请输入章节顺序号" value="1" min="1">
+        </div>
+        
+        <button onclick="addChapter()">新增章节</button>
+        <button onclick="clearForm()">清空表单</button>
+        
+        <div id="result" class="result" style="display: none;"></div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:8080/api/eduagentx/teacher';
+
+        async function addChapter() {
+            const token = document.getElementById('token').value.trim();
+            const courseId = document.getElementById('courseId').value.trim();
+            const title = document.getElementById('title').value.trim();
+            const content = document.getElementById('content').value.trim();
+            const order = parseInt(document.getElementById('order').value);
+
+            if (!token) {
+                showResult('请输入Token', 'error');
+                return;
+            }
+
+            if (!courseId) {
+                showResult('请输入课程ID', 'error');
+                return;
+            }
+
+            if (!title) {
+                showResult('请输入章节标题', 'error');
+                return;
+            }
+
+            if (!order || order < 1) {
+                showResult('请输入有效的章节顺序号', 'error');
+                return;
+            }
+
+            const requestData = {
+                courseId: courseId,
+                title: title,
+                content: content,
+                order: order
+            };
+
+            try {
+                showResult('正在新增章节...', 'success');
+                
+                const response = await fetch(`${API_BASE_URL}/add-chapter`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'authorization': token
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    showResult(`章节新增成功！\n\n响应数据：\n${JSON.stringify(result, null, 2)}`, 'success');
+                } else {
+                    showResult(`章节新增失败！\n\n错误信息：\n${result.message || '未知错误'}\n\n完整响应：\n${JSON.stringify(result, null, 2)}`, 'error');
+                }
+            } catch (error) {
+                showResult(`请求失败！\n\n错误信息：\n${error.message}`, 'error');
+            }
+        }
+
+        function clearForm() {
+            document.getElementById('token').value = '';
+            document.getElementById('courseId').value = 'COURSE001';
+            document.getElementById('title').value = '第一章 概述';
+            document.getElementById('content').value = '这是第一章的内容，主要介绍课程的基本概念和学习目标。';
+            document.getElementById('order').value = '1';
+            hideResult();
+        }
+
+        function showResult(message, type) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.textContent = message;
+            resultDiv.className = `result ${type}`;
+            resultDiv.style.display = 'block';
+        }
+
+        function hideResult() {
+            document.getElementById('result').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
