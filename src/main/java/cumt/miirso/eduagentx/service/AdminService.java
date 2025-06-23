@@ -107,4 +107,26 @@ public interface AdminService extends IService<AdminDO> {
      * @return 课程导入结果
      */
     cumt.miirso.eduagentx.dto.resp.CourseImportRespDTO batchImportCourses(org.springframework.web.multipart.MultipartFile file);
+    
+    /**
+     * 管理员为课程分配教师
+     *
+     * @param requestParam 课程教师分配请求参数
+     * @return 分配结果
+     */
+    cumt.miirso.eduagentx.dto.resp.CourseTeacherAssignRespDTO assignTeacherToCourse(cumt.miirso.eduagentx.dto.req.CourseTeacherAssignReqDTO requestParam);
+    
+    /**
+     * 管理员按班级名称批量添加学生到课程
+     * 
+     * 功能说明：
+     * - 根据班级名称查找该班级的所有学生
+     * - 批量将学生添加到指定课程中
+     * - 避免重复选课，已选课的学生不会重复添加
+     * - 同时更新课程-班级关联表
+     * 
+     * @param requestParam 班级选课请求参数，包含班级名称和课程ID
+     * @return 选课结果，包含成功选课学生数量、已选学生数量等详细信息
+     */
+    cumt.miirso.eduagentx.dto.resp.ClassEnrollCourseRespDTO enrollClassToCourse(cumt.miirso.eduagentx.dto.req.ClassEnrollCourseReqDTO requestParam);
 }

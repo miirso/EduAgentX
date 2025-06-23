@@ -14,15 +14,26 @@ import cumt.miirso.eduagentx.dto.resp.AdminLoginRespDTO;
 import cumt.miirso.eduagentx.dto.resp.AdminRegisterRespDTO;
 import cumt.miirso.eduagentx.dto.resp.ClassQueryRespDTO;
 import cumt.miirso.eduagentx.dto.resp.CourseImportRespDTO;
+import cumt.miirso.eduagentx.dto.resp.CourseTeacherAssignRespDTO;
 import cumt.miirso.eduagentx.dto.resp.StudentInfoRespDTO;
+import cumt.miirso.eduagentx.dto.req.CourseTeacherAssignReqDTO;
+import cumt.miirso.eduagentx.dto.req.ClassEnrollCourseReqDTO;
+import cumt.miirso.eduagentx.dto.resp.ClassEnrollCourseRespDTO;
 import cumt.miirso.eduagentx.entity.AdminDO;
 import cumt.miirso.eduagentx.entity.ClassDO;
 import cumt.miirso.eduagentx.entity.CourseDO;
+import cumt.miirso.eduagentx.entity.CourseClassDO;
+import cumt.miirso.eduagentx.entity.CourseTeacherDO;
+import cumt.miirso.eduagentx.entity.EnrollmentDO;
 import cumt.miirso.eduagentx.entity.StudentClassRelationDO;
 import cumt.miirso.eduagentx.entity.StudentDO;
 import cumt.miirso.eduagentx.entity.TeacherDO;
 import cumt.miirso.eduagentx.mapper.AdminMapper;
 import cumt.miirso.eduagentx.mapper.ClassMapper;
+import cumt.miirso.eduagentx.mapper.CourseClassMapper;
+import cumt.miirso.eduagentx.mapper.CourseTeacherMapper;
+import cumt.miirso.eduagentx.mapper.EnrollmentMapper;
+import cumt.miirso.eduagentx.mapper.StudentMapper;
 import cumt.miirso.eduagentx.service.AdminService;
 import cumt.miirso.eduagentx.service.CourseService;
 import cumt.miirso.eduagentx.service.StudentClassRelationService;
@@ -62,14 +73,15 @@ import java.util.concurrent.TimeUnit;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class AdminServiceImpl extends ServiceImpl<AdminMapper, AdminDO> implements AdminService {
-
-    private final RedissonClient redissonClient;
-    private final StringRedisTemplate stringRedisTemplate;
-    private final TeacherService teacherService;    private final StudentService studentService;
+public class AdminServiceImpl extends ServiceImpl<AdminMapper, AdminDO> implements AdminService {    private final RedissonClient redissonClient;
+    private final StringRedisTemplate stringRedisTemplate;    private final TeacherService teacherService;    private final StudentService studentService;
     private final StudentClassRelationService studentClassRelationService;
     private final ClassMapper classMapper;
     private final CourseService courseService;
+    private final CourseTeacherMapper courseTeacherMapper;
+    private final EnrollmentMapper enrollmentMapper;
+    private final CourseClassMapper courseClassMapper;
+    private final StudentMapper studentMapper;
     
     @Override
     public AdminRegisterRespDTO register(AdminRegisterReqDTO adminRegisterReqDTO) {
@@ -959,5 +971,257 @@ public class AdminServiceImpl extends ServiceImpl<AdminMapper, AdminDO> implemen
         return courseService.lambdaQuery()
                 .eq(CourseDO::getId, courseId)
                 .exists();
+    }
+    
+    /**
+     * 管理员为课程分配教师
+     *
+     * @param requestParam 课程教师分配请求参数
+     * @return 分配结果
+     */
+    @Override
+    @Transactional
+    public CourseTeacherAssignRespDTO assignTeacherToCourse(CourseTeacherAssignReqDTO requestParam) {
+        log.info("=== 开始为课程分配教师 ===");
+        log.info("请求参数: 课程ID={}, 教师ID={}", requestParam.getCourseId(), requestParam.getTeacherId());
+        
+        // 1. 参数验证
+        if (requestParam.getCourseId() == null || requestParam.getCourseId().trim().isEmpty()) {
+            throw new ClientException("课程ID不能为空");
+        }
+        if (requestParam.getTeacherId() == null || requestParam.getTeacherId().trim().isEmpty()) {
+            throw new ClientException("教师ID不能为空");
+        }
+        
+        // 2. 验证课程是否存在
+        CourseDO courseDO = courseService.lambdaQuery()
+                .eq(CourseDO::getId, requestParam.getCourseId())
+                .eq(CourseDO::getTag, true)
+                .one();
+        if (courseDO == null) {
+            throw new ClientException("课程不存在或已被删除");
+        }
+        
+        // 3. 验证教师是否存在
+        TeacherDO teacherDO = teacherService.lambdaQuery()
+                .eq(TeacherDO::getId, requestParam.getTeacherId())
+                .eq(TeacherDO::getTag, true)
+                .one();
+        if (teacherDO == null) {
+            throw new ClientException("教师不存在或已被删除");
+        }
+        
+        // 4. 检查是否已经分配过该教师
+        boolean alreadyAssigned = courseTeacherMapper.selectCount(
+            new LambdaQueryWrapper<CourseTeacherDO>()
+                .eq(CourseTeacherDO::getCourseId, requestParam.getCourseId())
+                .eq(CourseTeacherDO::getTeacherId, requestParam.getTeacherId())
+        ) > 0;
+        
+        String message;
+        Long assignId;
+        
+        if (alreadyAssigned) {
+            message = "该教师已经被分配到此课程";
+            // 获取现有记录的ID
+            CourseTeacherDO existingRecord = courseTeacherMapper.selectOne(
+                new LambdaQueryWrapper<CourseTeacherDO>()
+                    .eq(CourseTeacherDO::getCourseId, requestParam.getCourseId())
+                    .eq(CourseTeacherDO::getTeacherId, requestParam.getTeacherId())
+            );
+            assignId = existingRecord.getId();
+            log.info("教师{}已经分配到课程{}，跳过重复分配", teacherDO.getRealName(), courseDO.getName());
+        } else {
+            // 5. 创建课程教师关联记录
+            CourseTeacherDO courseTeacherDO = new CourseTeacherDO();
+            courseTeacherDO.setCourseId(requestParam.getCourseId());
+            courseTeacherDO.setTeacherId(requestParam.getTeacherId());
+            
+            int result = courseTeacherMapper.insert(courseTeacherDO);
+            if (result <= 0) {
+                throw new ClientException("分配教师失败，请稍后重试");
+            }
+            
+            assignId = courseTeacherDO.getId();
+            message = "成功为课程分配教师";
+            log.info("成功为课程{}分配教师{}", courseDO.getName(), teacherDO.getRealName());
+        }
+        
+        // 6. 构建返回结果
+        CourseTeacherAssignRespDTO respDTO = new CourseTeacherAssignRespDTO();
+        respDTO.setId(assignId);
+        respDTO.setCourseId(requestParam.getCourseId());
+        respDTO.setCourseName(courseDO.getName());
+        respDTO.setTeacherId(requestParam.getTeacherId());
+        respDTO.setTeacherName(teacherDO.getRealName());
+        respDTO.setTeacherNo(teacherDO.getTeacherNo());
+        respDTO.setMessage(message);
+          log.info("=== 课程教师分配完成 ===");
+        log.info("分配结果: {}", respDTO);
+        
+        return respDTO;
+    }
+
+    /**
+     * 管理员按班级名称批量添加学生到课程
+     * 
+     * 实现步骤：
+     * 1. 验证课程是否存在
+     * 2. 根据班级名称查找学生列表
+     * 3. 查找已经选课的学生
+     * 4. 批量插入新的选课记录
+     * 5. 更新课程-班级关联
+     * 6. 构建返回结果
+     * 
+     * @param requestParam 班级选课请求参数
+     * @return 选课结果
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ClassEnrollCourseRespDTO enrollClassToCourse(ClassEnrollCourseReqDTO requestParam) {
+        log.info("=== 开始执行班级选课 ===");
+        log.info("请求参数: {}", requestParam);
+        
+        // 1. 参数验证
+        if (requestParam.getClassName() == null || requestParam.getClassName().trim().isEmpty()) {
+            throw new ClientException("班级名称不能为空");
+        }
+        if (requestParam.getCourseId() == null || requestParam.getCourseId().trim().isEmpty()) {
+            throw new ClientException("课程ID不能为空");
+        }
+        
+        String className = requestParam.getClassName().trim();
+        String courseId = requestParam.getCourseId().trim();
+        
+        // 2. 验证课程是否存在
+        CourseDO courseDO = courseService.lambdaQuery()
+                .eq(CourseDO::getId, courseId)
+                .eq(CourseDO::getTag, true)
+                .one();
+        if (courseDO == null) {
+            throw new ClientException("课程不存在或已被删除");
+        }
+        log.info("找到课程: {} - {}", courseDO.getId(), courseDO.getName());
+        
+        // 3. 根据班级名称查找学生列表 (使用classCode字段)
+        List<StudentDO> classStudents = studentMapper.selectList(
+                new LambdaQueryWrapper<StudentDO>()
+                        .eq(StudentDO::getClassCode, className)
+                        .eq(StudentDO::getTag, true)
+        );
+        
+        if (classStudents.isEmpty()) {
+            throw new ClientException("班级'" + className + "'中没有找到学生，请检查班级名称是否正确");
+        }
+        log.info("找到班级 '{}' 的学生数量: {}", className, classStudents.size());
+        
+        // 4. 查找已经选课的学生
+        List<Long> studentIds = classStudents.stream().map(StudentDO::getId).toList();
+        List<EnrollmentDO> existingEnrollments = enrollmentMapper.selectList(
+                new LambdaQueryWrapper<EnrollmentDO>()
+                        .eq(EnrollmentDO::getCourseId, courseId)
+                        .in(EnrollmentDO::getStudentId, studentIds)
+                        .eq(EnrollmentDO::getTag, true)
+        );
+        
+        List<Long> alreadyEnrolledStudentIds = existingEnrollments.stream()
+                .map(EnrollmentDO::getStudentId)
+                .toList();
+        log.info("已经选课的学生数量: {}", alreadyEnrolledStudentIds.size());
+        
+        // 5. 筛选需要新增选课的学生
+        List<StudentDO> studentsToEnroll = classStudents.stream()
+                .filter(student -> !alreadyEnrolledStudentIds.contains(student.getId()))
+                .toList();
+        log.info("需要新增选课的学生数量: {}", studentsToEnroll.size());
+        
+        // 6. 批量插入新的选课记录
+        if (!studentsToEnroll.isEmpty()) {
+            List<EnrollmentDO> newEnrollments = studentsToEnroll.stream()
+                    .map(student -> {
+                        EnrollmentDO enrollment = new EnrollmentDO();
+                        enrollment.setStudentId(student.getId());
+                        enrollment.setCourseId(courseId);
+                        enrollment.setEnrollmentDate(java.time.LocalDateTime.now());
+                        return enrollment;
+                    })
+                    .toList();
+            
+            // 批量保存
+            for (EnrollmentDO enrollment : newEnrollments) {
+                enrollmentMapper.insert(enrollment);
+            }
+            log.info("成功插入 {} 条选课记录", newEnrollments.size());
+        }
+        
+        // 7. 更新课程-班级关联表 (根据classes表查找班级ID)
+        ClassDO classDO = classMapper.selectOne(
+                new LambdaQueryWrapper<ClassDO>()
+                        .eq(ClassDO::getName, className)
+                        .eq(ClassDO::getTag, true)
+        );
+        
+        if (classDO != null) {
+            // 检查课程-班级关联是否已存在
+            CourseClassDO existingCourseClass = courseClassMapper.selectOne(
+                    new LambdaQueryWrapper<CourseClassDO>()
+                            .eq(CourseClassDO::getCourseId, courseId)
+                            .eq(CourseClassDO::getClassId, classDO.getId())
+            );
+            
+            if (existingCourseClass == null) {
+                // 插入新的课程-班级关联
+                CourseClassDO courseClassDO = new CourseClassDO();
+                courseClassDO.setCourseId(courseId);
+                courseClassDO.setClassId(classDO.getId());
+                courseClassMapper.insert(courseClassDO);
+                log.info("成功创建课程-班级关联: 课程ID={}, 班级ID={}", courseId, classDO.getId());
+            } else {
+                log.info("课程-班级关联已存在: 课程ID={}, 班级ID={}", courseId, classDO.getId());
+            }
+        } else {
+            log.warn("在classes表中未找到班级 '{}', 跳过课程-班级关联更新", className);
+        }
+        
+        // 8. 构建返回结果
+        ClassEnrollCourseRespDTO respDTO = new ClassEnrollCourseRespDTO();
+        respDTO.setClassName(className);
+        respDTO.setCourseId(courseId);
+        respDTO.setCourseName(courseDO.getName());
+        respDTO.setTotalStudents(classStudents.size());
+        respDTO.setEnrolledCount(studentsToEnroll.size());
+        respDTO.setAlreadyEnrolledCount(alreadyEnrolledStudentIds.size());
+        
+        // 构建成功选课学生信息
+        List<ClassEnrollCourseRespDTO.EnrolledStudentInfo> enrolledStudents = studentsToEnroll.stream()
+                .map(student -> {
+                    ClassEnrollCourseRespDTO.EnrolledStudentInfo info = new ClassEnrollCourseRespDTO.EnrolledStudentInfo();
+                    info.setStudentId(student.getId());
+                    info.setStudentName(student.getRealName());
+                    info.setStudentNo(student.getStudentNo());
+                    return info;
+                })
+                .toList();
+        respDTO.setEnrolledStudents(enrolledStudents);
+        
+        // 构建已选课学生信息
+        List<ClassEnrollCourseRespDTO.EnrolledStudentInfo> alreadyEnrolledStudents = classStudents.stream()
+                .filter(student -> alreadyEnrolledStudentIds.contains(student.getId()))
+                .map(student -> {
+                    ClassEnrollCourseRespDTO.EnrolledStudentInfo info = new ClassEnrollCourseRespDTO.EnrolledStudentInfo();
+                    info.setStudentId(student.getId());
+                    info.setStudentName(student.getRealName());
+                    info.setStudentNo(student.getStudentNo());
+                    return info;
+                })
+                .toList();
+        respDTO.setAlreadyEnrolledStudents(alreadyEnrolledStudents);
+        
+        log.info("=== 班级选课完成 ===");
+        log.info("选课结果: 班级={}, 课程={}, 总学生数={}, 新增选课={}, 已选课={}", 
+                className, courseDO.getName(), classStudents.size(), 
+                studentsToEnroll.size(), alreadyEnrolledStudentIds.size());
+        
+        return respDTO;
     }
 }

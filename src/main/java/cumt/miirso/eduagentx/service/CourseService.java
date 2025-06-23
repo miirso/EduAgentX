@@ -2,6 +2,9 @@ package cumt.miirso.eduagentx.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import cumt.miirso.eduagentx.dto.req.CourseCreateReqDTO;
+import cumt.miirso.eduagentx.dto.req.CoursePageQueryReqDTO;
+import cumt.miirso.eduagentx.dto.resp.CourseDetailRespDTO;
+import cumt.miirso.eduagentx.dto.resp.CoursePageQueryRespDTO;
 import cumt.miirso.eduagentx.dto.resp.CourseQueryRespDTO;
 import cumt.miirso.eduagentx.entity.CourseDO;
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,4 +28,25 @@ public interface CourseService extends IService<CourseDO> {
      * @return 课程信息列表
      */
     List<CourseQueryRespDTO> listAllCourses();
+    
+    /**
+     * 分页查询课程信息
+     * @param requestParam 分页查询请求参数
+     * @return 分页查询结果
+     */
+    CoursePageQueryRespDTO pageQueryCourses(CoursePageQueryReqDTO requestParam);
+    
+    /**
+     * 根据课程ID查询课程详细信息
+     * 
+     * 功能说明：
+     * - 查询课程基本信息
+     * - 查询分配的教师列表
+     * - 查询关联的班级列表
+     * - 统计选课学生数量
+     * 
+     * @param courseId 课程ID
+     * @return 课程详细信息
+     */
+    CourseDetailRespDTO getCourseDetailById(String courseId);
 }

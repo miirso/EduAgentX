@@ -3,9 +3,11 @@ package cumt.miirso.eduagentx.service;
 import com.baomidou.mybatisplus.extension.service.IService;
 import cumt.miirso.eduagentx.dto.req.PasswordUpdateReqDTO;
 import cumt.miirso.eduagentx.dto.req.TeacherLoginReqDTO;
+import cumt.miirso.eduagentx.dto.req.TeacherPageQueryReqDTO;
 import cumt.miirso.eduagentx.dto.req.TeacherRegisterReqDTO;
 import cumt.miirso.eduagentx.dto.req.TeacherUpdateReqDTO;
 import cumt.miirso.eduagentx.dto.resp.TeacherLoginRespDTO;
+import cumt.miirso.eduagentx.dto.resp.TeacherPageQueryRespDTO;
 import cumt.miirso.eduagentx.dto.resp.TeacherRegisterRespDTO;
 import cumt.miirso.eduagentx.entity.TeacherDO;
 import jakarta.servlet.http.HttpServletRequest;
@@ -72,4 +74,27 @@ public interface TeacherService extends IService<TeacherDO> {
      * @return 教师信息
      */
     TeacherDO getTeacherInfo(String username);
+
+    /**
+     * 教师分页查询
+     * 
+     * 支持多种查询条件：
+     * - 按教师姓名模糊查询
+     * - 按用户名模糊查询
+     * - 按教师工号精确查询
+     * - 按性别筛选
+     * - 按手机号模糊查询
+     * - 按学校模糊查询
+     * - 按学院模糊查询
+     * 
+     * 支持灵活排序：
+     * - 按创建时间排序（默认）
+     * - 按教师姓名排序
+     * - 按教师工号排序
+     * - 支持升序/降序
+     * 
+     * @param requestParam 分页查询请求参数
+     * @return 分页查询结果
+     */
+    TeacherPageQueryRespDTO pageQueryTeachers(TeacherPageQueryReqDTO requestParam);
 }

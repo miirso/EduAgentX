@@ -50,58 +50,111 @@ public class StudentServiceImpl extends ServiceImpl<StudentMapper, StudentDO> im
     private final RedissonClient redissonClient;
     private final StringRedisTemplate stringRedisTemplate;
     private final StudentClassRelationService studentClassRelationService;
-    private final ClassMapper classMapper;
-
-    @Override
+    private final ClassMapper classMapper;    @Override
+    @Transactional(rollbackFor = Exception.class)
     public StudentRegisterRespDTO register(StudentRegisterReqDTO studentRegisterReqDTO) {
+        log.info("=== 开始执行学生注册 ===");
+        log.info("注册参数: 用户名={}, 学号={}, 姓名={}, 班级代码={}", 
+                studentRegisterReqDTO.getUsername(), 
+                studentRegisterReqDTO.getStudentNo(),
+                studentRegisterReqDTO.getRealName(),
+                studentRegisterReqDTO.getClassCode());
+
         // 1. 检查用户名是否已存在
+        log.info("步骤1: 检查用户名是否已存在");
         boolean usernameExists = lambdaQuery()
                 .eq(StudentDO::getUsername, studentRegisterReqDTO.getUsername())
                 .exists();
         if (usernameExists) {
+            log.warn("用户名已存在: {}", studentRegisterReqDTO.getUsername());
             throw new ClientException(BaseErrorCode.USER_NAME_EXIST_ERROR);
         }
 
         // 2. 检查学号是否已存在
+        log.info("步骤2: 检查学号是否已存在");
         boolean studentNoExists = lambdaQuery()
                 .eq(StudentDO::getStudentNo, studentRegisterReqDTO.getStudentNo())
                 .exists();
         if (studentNoExists) {
+            log.warn("学号已存在: {}", studentRegisterReqDTO.getStudentNo());
             throw new ClientException(StudentErrorCode.STUDENT_ALREADY_EXIST);
         }
 
-        // 3. 创建
+        // 3. 创建学生对象
+        log.info("步骤3: 创建学生对象");
         StudentDO studentDO = getStudentDO(studentRegisterReqDTO);
         
-        // 4. 保存到数据库
+        // 4. 保存学生信息到数据库
+        log.info("步骤4: 保存学生信息到数据库");
         save(studentDO);
-        
-        // 5. 如果有班级代码，尝试关联班级
+        log.info("学生信息保存成功, ID: {}", studentDO.getId());
+          // 5. 如果有班级代码，检查并创建班级，然后添加学生班级关联记录
         if (studentDO.getClassCode() != null && !studentDO.getClassCode().isEmpty()) {
-            // 查询班级信息
-            LambdaQueryWrapper<ClassDO> queryWrapper = new LambdaQueryWrapper<>();
-            queryWrapper.eq(ClassDO::getName, studentDO.getClassCode());
-            ClassDO classDO = classMapper.selectOne(queryWrapper);
+            log.info("步骤5: 处理班级关联 - 班级代码: {}", studentDO.getClassCode());
             
-            if (classDO != null) {
-                // 添加学生班级关联
-                studentClassRelationService.addRelation(
+            try {
+                // 5.1 检查classes表中是否已存在该班级
+                LambdaQueryWrapper<ClassDO> classQueryWrapper = new LambdaQueryWrapper<>();
+                classQueryWrapper.eq(ClassDO::getName, studentDO.getClassCode());
+                ClassDO existingClass = classMapper.selectOne(classQueryWrapper);
+                
+                Long classId = null;
+                if (existingClass == null) {
+                    // 5.2 班级不存在，创建新班级
+                    log.info("班级不存在，创建新班级: {}", studentDO.getClassCode());
+                    ClassDO newClass = new ClassDO();
+                    newClass.setName(studentDO.getClassCode());
+                    
+                    // 尝试从学生的专业代码推断专业ID
+                    if (studentDO.getMajorCode() != null && !studentDO.getMajorCode().isEmpty()) {
+                        newClass.setMajorId(studentDO.getMajorCode());
+                        log.info("设置班级专业ID: {}", studentDO.getMajorCode());
+                    }
+                    
+                    classMapper.insert(newClass);
+                    classId = newClass.getId();
+                    log.info("新班级创建成功: ID={}, 名称={}", classId, newClass.getName());
+                } else {
+                    // 5.3 班级已存在，获取班级ID
+                    classId = existingClass.getId();
+                    log.info("班级已存在: ID={}, 名称={}", classId, existingClass.getName());
+                }
+                
+                // 5.4 添加学生班级关联记录
+                boolean relationResult = studentClassRelationService.addRelation(
                     studentDO.getId(),
-                    classDO.getId(),
+                    classId,
                     studentDO.getStudentNo(),
                     studentDO.getClassCode()
                 );
+                
+                if (relationResult) {
+                    log.info("学生班级关联添加成功: 学号={}, 班级代码={}, 班级ID={}", 
+                            studentDO.getStudentNo(), studentDO.getClassCode(), classId);
+                } else {
+                    log.warn("学生班级关联添加失败: 学号={}, 班级代码={}, 班级ID={}", 
+                            studentDO.getStudentNo(), studentDO.getClassCode(), classId);
+                }
+                
+            } catch (Exception e) {
+                log.error("处理班级关联时发生异常: 学号={}, 班级代码={}, 错误信息={}", 
+                         studentDO.getStudentNo(), studentDO.getClassCode(), e.getMessage(), e);
+                // 不抛出异常，避免影响学生注册主流程
             }
+        } else {
+            log.info("步骤5: 跳过班级关联 - 未提供班级代码");
         }
         
         // 6. 构建并返回响应DTO
+        log.info("步骤6: 构建响应数据");
         StudentRegisterRespDTO respDTO = new StudentRegisterRespDTO();
         respDTO.setId(studentDO.getId().toString());
         respDTO.setUsername(studentDO.getUsername());
         respDTO.setRealName(studentDO.getRealName());
         respDTO.setStudentNo(studentDO.getStudentNo());
 
-        log.info("用户已成功创建:{}", respDTO);
+        log.info("=== 学生注册流程完成 ===");
+        log.info("注册成功的学生信息: {}", respDTO);
 
         return respDTO;
     }

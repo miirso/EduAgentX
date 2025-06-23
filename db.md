@@ -235,17 +235,17 @@ alter table resources
 -- auto-generated definition
 create table student_class_relation
 (
-    id          serial
-        primary key,
-    student_no  char(8)    not null
-        references student (student_no),
-    class_code  varchar(8) not null,
-    create_time timestamp default CURRENT_TIMESTAMP,
-    update_time timestamp default CURRENT_TIMESTAMP,
-    delete_time timestamp,
-    tag         boolean   default true,
-    constraint student_class_unique
-        unique (student_no, class_code)
+id          serial
+primary key,
+student_no  char(16)    not null
+references student (student_no),
+class_code  varchar(16) not null,
+create_time timestamp default CURRENT_TIMESTAMP,
+update_time timestamp default CURRENT_TIMESTAMP,
+delete_time timestamp,
+tag         boolean   default true,
+constraint student_class_unique
+unique (student_no, class_code)
 );
 
 comment on column student_class_relation.student_no is '学生学号';
@@ -253,13 +253,15 @@ comment on column student_class_relation.student_no is '学生学号';
 comment on column student_class_relation.class_code is '班级代码';
 
 alter table student_class_relation
-    owner to miirso;
+owner to miirso;
 
 create index idx_student_class_relation_student_no
-    on student_class_relation (student_no);
+on student_class_relation (student_no);
 
 create index idx_student_class_relation_class_code
-    on student_class_relation (class_code);
+on student_class_relation (class_code);
+
+
 
 -- auto-generated definition
 create table subjects

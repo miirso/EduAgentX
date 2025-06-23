@@ -6,17 +6,25 @@ import cumt.miirso.eduagentx.convention.result.Results;
 import cumt.miirso.eduagentx.dto.req.AdminLoginReqDTO;
 import cumt.miirso.eduagentx.dto.req.AdminRegisterReqDTO;
 import cumt.miirso.eduagentx.dto.req.ClassCreateReqDTO;
+import cumt.miirso.eduagentx.dto.req.ClassEnrollCourseReqDTO;
+import cumt.miirso.eduagentx.dto.req.CourseTeacherAssignReqDTO;
+import cumt.miirso.eduagentx.dto.req.TeacherPageQueryReqDTO;
 import cumt.miirso.eduagentx.dto.resp.AdminLoginRespDTO;
 import cumt.miirso.eduagentx.dto.resp.AdminRegisterRespDTO;
+import cumt.miirso.eduagentx.dto.resp.ClassEnrollCourseRespDTO;
 import cumt.miirso.eduagentx.dto.resp.ClassQueryRespDTO;
 import cumt.miirso.eduagentx.dto.resp.CourseImportRespDTO;
 import cumt.miirso.eduagentx.dto.resp.CourseQueryRespDTO;
+import cumt.miirso.eduagentx.dto.resp.CourseTeacherAssignRespDTO;
 import cumt.miirso.eduagentx.dto.resp.StudentInfoRespDTO;
+import cumt.miirso.eduagentx.dto.resp.TeacherPageQueryRespDTO;
 import cumt.miirso.eduagentx.service.AdminService;
 import cumt.miirso.eduagentx.service.ClassService;
 import cumt.miirso.eduagentx.service.CourseService;
+import cumt.miirso.eduagentx.service.TeacherService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -37,11 +45,11 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/eduagentx/admin")
 @RequiredArgsConstructor
-public class AdminController {
-
-    private final AdminService adminService;
+@Slf4j
+public class AdminController {    private final AdminService adminService;
     private final ClassService classService;
     private final CourseService courseService;
+    private final TeacherService teacherService;
 
     /**
      * 管理员注册
@@ -182,7 +190,9 @@ public class AdminController {
                     .setMessage("批量注册教师失败：" + e.getMessage())
                     .setData(0);
         }
-    }    /**
+    }
+
+    /**
      * 管理员批量注册学生（通过Excel文件）
      * Excel文件格式：列分别为studentNo, realName, gender, username, phone, email, majorCode, classCode, college, school，包含表头
      * 
@@ -333,6 +343,120 @@ public class AdminController {
     @PostMapping("/import/courses")
     public Result<CourseImportRespDTO> batchImportCoursesFromExcel(@RequestParam("file") MultipartFile file) {
         CourseImportRespDTO result = adminService.batchImportCourses(file);
+        return Results.success(result);
+    }
+      /**
+     * 管理员为课程分配教师
+     * 
+     * 功能说明：
+     * - 管理员可以将指定的教师分配给指定的课程
+     * - 如果该教师已经分配到此课程，则返回现有的分配信息
+     * - 支持一个课程分配多个教师的场景
+     * 
+     * @param requestParam 课程教师分配请求参数，包含课程ID和教师ID
+     * @return 分配结果，包含分配记录ID、课程信息、教师信息等
+     */
+    @PostMapping("/assign-teacher-to-course")
+    public Result<CourseTeacherAssignRespDTO> assignTeacherToCourse(@RequestBody CourseTeacherAssignReqDTO requestParam) {
+        log.info("管理员为课程分配教师请求: {}", requestParam);
+        CourseTeacherAssignRespDTO result = adminService.assignTeacherToCourse(requestParam);
+        return Results.success(result);
+    }
+    
+    /**
+     * 管理员分页查询教师信息
+     * 
+     * 功能说明：
+     * - 支持按教师姓名、用户名、工号、性别、手机号、学校、学院等条件查询
+     * - 支持分页查询和排序
+     * - 支持 GET 和 POST 两种请求方式
+     * 
+     * @param requestParam 教师分页查询请求参数
+     * @return 分页查询结果，包含教师列表和分页信息
+     */
+    @PostMapping("/page/teacher")
+    public Result<TeacherPageQueryRespDTO> pageQueryTeachers(@RequestBody TeacherPageQueryReqDTO requestParam) {
+        log.info("管理员分页查询教师请求: {}", requestParam);
+        TeacherPageQueryRespDTO result = teacherService.pageQueryTeachers(requestParam);
+        return Results.success(result);
+    }
+      /**
+     * 管理员分页查询教师信息（GET方式）
+     * 
+     * 功能说明：
+     * - 支持按教师姓名、用户名、工号、性别、手机号、学校、学院等条件查询
+     * - 支持分页查询和排序
+     * - 使用 GET 请求方式，参数通过 URL 查询参数传递
+     * 
+     * @param current 当前页码
+     * @param size 每页显示条数
+     * @param realName 教师姓名（模糊查询）
+     * @param username 用户名（模糊查询）
+     * @param teacherNo 教师工号（精确查询）
+     * @param gender 性别（0：女，1：男）
+     * @param phone 手机号（模糊查询）
+     * @param school 学校（模糊查询）
+     * @param college 学院（模糊查询）
+     * @param sortBy 排序字段
+     * @param sortOrder 排序方式
+     * @return 分页查询结果，包含教师列表和分页信息
+     */
+    @GetMapping("/page/teacher")
+    public Result<TeacherPageQueryRespDTO> pageQueryTeachersGet(
+            @RequestParam(required = false) Integer current,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String realName,
+            @RequestParam(required = false) String username,
+            @RequestParam(required = false) String teacherNo,
+            @RequestParam(required = false) Integer gender,
+            @RequestParam(required = false) String phone,
+            @RequestParam(required = false) String school,
+            @RequestParam(required = false) String college,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false) String sortOrder) {
+        
+        TeacherPageQueryReqDTO requestParam = new TeacherPageQueryReqDTO();
+        
+        // 设置参数，如果为null则使用默认值
+        requestParam.setCurrent(current != null ? current : 1);
+        requestParam.setSize(size != null ? size : 10);
+        requestParam.setRealName(realName);
+        requestParam.setUsername(username);
+        requestParam.setTeacherNo(teacherNo);
+        requestParam.setGender(gender);
+        requestParam.setPhone(phone);
+        requestParam.setSchool(school);
+        requestParam.setCollege(college);
+        requestParam.setSortBy(sortBy != null ? sortBy : "create_time");
+        requestParam.setSortOrder(sortOrder != null ? sortOrder : "desc");
+        
+        log.info("=== GET 请求收到教师分页查询 ===");
+        log.info("收到教师分页查询GET请求: {}", requestParam);
+        log.info("GET 参数详情: current={}, size={}, realName={}, username={}, teacherNo={}, sortBy={}, sortOrder={}", 
+                requestParam.getCurrent(), requestParam.getSize(), requestParam.getRealName(),
+                requestParam.getUsername(), requestParam.getTeacherNo(), requestParam.getSortBy(), requestParam.getSortOrder());
+        
+        TeacherPageQueryRespDTO result = teacherService.pageQueryTeachers(requestParam);
+        return Results.success(result);
+    }
+    
+    /**
+     * 管理员按班级名称批量添加学生到课程
+     * 
+     * 功能说明：
+     * - 根据班级名称查找该班级的所有学生
+     * - 批量将学生添加到指定课程中
+     * - 避免重复选课，已选课的学生不会重复添加
+     * - 同时更新课程-班级关联表
+     * - 返回详细的选课结果统计
+     * 
+     * @param requestParam 班级选课请求参数，包含班级名称和课程ID
+     * @return 选课结果，包含成功选课学生数量、已选学生数量等详细信息
+     */
+    @PostMapping("/enroll-class-to-course")
+    public Result<ClassEnrollCourseRespDTO> enrollClassToCourse(@RequestBody ClassEnrollCourseReqDTO requestParam) {
+        log.info("管理员班级选课请求: {}", requestParam);
+        ClassEnrollCourseRespDTO result = adminService.enrollClassToCourse(requestParam);
         return Results.success(result);
     }
 }

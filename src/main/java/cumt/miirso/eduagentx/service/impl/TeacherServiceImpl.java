@@ -1,7 +1,9 @@
 package cumt.miirso.eduagentx.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import cumt.miirso.eduagentx.common.constant.RedisCacheConstant;
 import cumt.miirso.eduagentx.convention.errorcode.BaseErrorCode;
@@ -10,9 +12,12 @@ import cumt.miirso.eduagentx.convention.exception.ClientException;
 import cumt.miirso.eduagentx.dto.UserInfoDTO;
 import cumt.miirso.eduagentx.dto.req.PasswordUpdateReqDTO;
 import cumt.miirso.eduagentx.dto.req.TeacherLoginReqDTO;
+import cumt.miirso.eduagentx.dto.req.TeacherPageQueryReqDTO;
 import cumt.miirso.eduagentx.dto.req.TeacherRegisterReqDTO;
 import cumt.miirso.eduagentx.dto.req.TeacherUpdateReqDTO;
 import cumt.miirso.eduagentx.dto.resp.TeacherLoginRespDTO;
+import cumt.miirso.eduagentx.dto.resp.TeacherPageQueryRespDTO;
+import cumt.miirso.eduagentx.dto.resp.TeacherQueryRespDTO;
 import cumt.miirso.eduagentx.dto.resp.TeacherRegisterRespDTO;
 import cumt.miirso.eduagentx.entity.TeacherDO;
 import cumt.miirso.eduagentx.mapper.TeacherMapper;
@@ -26,6 +31,7 @@ import org.redisson.api.RedissonClient;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -401,5 +407,187 @@ public class TeacherServiceImpl extends ServiceImpl<TeacherMapper, TeacherDO> im
         LambdaQueryWrapper<TeacherDO> queryWrapper = Wrappers.<TeacherDO>lambdaQuery()
                 .eq(TeacherDO::getUsername, username);
         return baseMapper.selectOne(queryWrapper);
+    }
+
+    /**
+     * 教师分页查询
+     * 
+     * 实现步骤：
+     * 1. 参数验证和默认值处理
+     * 2. 构建分页对象和查询条件
+     * 3. 执行分页查询
+     * 4. 转换查询结果为响应DTO
+     * 5. 构建分页响应信息
+     * 
+     * @param requestParam 分页查询请求参数
+     * @return 分页查询结果
+     */
+    @Override
+    public TeacherPageQueryRespDTO pageQueryTeachers(TeacherPageQueryReqDTO requestParam) {
+        log.info("=== 开始执行教师分页查询 ===");
+        log.info("原始参数: {}", requestParam);
+
+        // 1. 参数验证和默认值处理
+        if (requestParam.getCurrent() == null || requestParam.getCurrent() < 1) {
+            requestParam.setCurrent(1);
+        }
+        if (requestParam.getSize() == null || requestParam.getSize() < 1) {
+            requestParam.setSize(10);
+        }
+        if (requestParam.getSize() > 100) {
+            requestParam.setSize(100); // 限制最大每页条数
+        }
+
+        log.info("处理后参数: 当前页={}, 每页大小={}, 教师姓名='{}', 用户名='{}', 教师工号='{}', 学院='{}'", 
+                requestParam.getCurrent(), requestParam.getSize(), 
+                requestParam.getRealName(), requestParam.getUsername(), requestParam.getTeacherNo(), requestParam.getCollege());
+
+        // 2. 构建分页对象
+        Page<TeacherDO> page = new Page<>(requestParam.getCurrent(), requestParam.getSize());
+        log.info("构建分页对象: current={}, size={}", page.getCurrent(), page.getSize());
+
+        // 3. 构建查询条件
+        LambdaQueryWrapper<TeacherDO> queryWrapper = new LambdaQueryWrapper<>();
+        
+        // 教师姓名模糊查询
+        if (requestParam.getRealName() != null && !requestParam.getRealName().trim().isEmpty()) {
+            queryWrapper.like(TeacherDO::getRealName, requestParam.getRealName().trim());
+            log.info("添加教师姓名模糊查询条件: '{}'", requestParam.getRealName().trim());
+        }
+        
+        // 用户名模糊查询
+        if (requestParam.getUsername() != null && !requestParam.getUsername().trim().isEmpty()) {
+            queryWrapper.like(TeacherDO::getUsername, requestParam.getUsername().trim());
+            log.info("添加用户名模糊查询条件: '{}'", requestParam.getUsername().trim());
+        }
+        
+        // 教师工号精确查询
+        if (requestParam.getTeacherNo() != null && !requestParam.getTeacherNo().trim().isEmpty()) {
+            queryWrapper.eq(TeacherDO::getTeacherNo, requestParam.getTeacherNo().trim());
+            log.info("添加教师工号精确查询条件: '{}'", requestParam.getTeacherNo().trim());
+        }
+        
+        // 性别精确查询
+        if (requestParam.getGender() != null) {
+            queryWrapper.eq(TeacherDO::getGender, requestParam.getGender());
+            log.info("添加性别查询条件: {}", requestParam.getGender());
+        }
+        
+        // 手机号模糊查询
+        if (requestParam.getPhone() != null && !requestParam.getPhone().trim().isEmpty()) {
+            queryWrapper.like(TeacherDO::getPhone, requestParam.getPhone().trim());
+            log.info("添加手机号模糊查询条件: '{}'", requestParam.getPhone().trim());
+        }
+        
+        // 学校模糊查询
+        if (requestParam.getSchool() != null && !requestParam.getSchool().trim().isEmpty()) {
+            queryWrapper.like(TeacherDO::getSchool, requestParam.getSchool().trim());
+            log.info("添加学校模糊查询条件: '{}'", requestParam.getSchool().trim());
+        }
+        
+        // 学院模糊查询
+        if (requestParam.getCollege() != null && !requestParam.getCollege().trim().isEmpty()) {
+            queryWrapper.like(TeacherDO::getCollege, requestParam.getCollege().trim());
+            log.info("添加学院模糊查询条件: '{}'", requestParam.getCollege().trim());
+        }
+        
+        // 只查询有效记录
+        queryWrapper.eq(TeacherDO::getTag, true);
+        
+        // 4. 设置排序
+        String sortBy = requestParam.getSortBy();
+        String sortOrder = requestParam.getSortOrder();
+        
+        // 设置排序的默认值
+        if (sortBy == null || sortBy.trim().isEmpty()) {
+            sortBy = "create_time"; // 默认按创建时间排序
+        }
+        if (sortOrder == null || sortOrder.trim().isEmpty()) {
+            sortOrder = "desc"; // 默认降序
+        }
+        
+        boolean isAsc = "asc".equalsIgnoreCase(sortOrder);
+        
+        switch (sortBy.toLowerCase()) {
+            case "create_time":
+                queryWrapper.orderBy(true, isAsc, TeacherDO::getCreateTime);
+                break;
+            case "real_name":
+                queryWrapper.orderBy(true, isAsc, TeacherDO::getRealName);
+                break;
+            case "teacher_no":
+                queryWrapper.orderBy(true, isAsc, TeacherDO::getTeacherNo);
+                break;
+            default:
+                queryWrapper.orderByDesc(TeacherDO::getCreateTime); // 默认按创建时间降序
+        }
+        log.info("设置排序: {} {}", sortBy, sortOrder);
+
+        // 执行分页查询前的检查
+        log.info("=== 执行分页查询前的检查 ===");
+        log.info("查询条件构建完成，准备执行分页查询");
+        
+        // 5. 执行分页查询
+        IPage<TeacherDO> pageResult = this.page(page, queryWrapper);
+        
+        log.info("=== 分页查询结果 ===");
+        log.info("分页查询完成: 总记录数={}, 当前页={}, 总页数={}, 实际返回记录数={}", 
+                pageResult.getTotal(), pageResult.getCurrent(), pageResult.getPages(), pageResult.getRecords().size());
+        
+        // 检查是否正确应用了分页
+        if (pageResult.getTotal() > 0 && pageResult.getRecords().size() == pageResult.getTotal()) {
+            log.warn("⚠️ 警告：返回的记录数等于总记录数，分页可能未生效！");
+            log.warn("预期页面大小: {}, 实际返回记录数: {}, 总记录数: {}", 
+                    requestParam.getSize(), pageResult.getRecords().size(), pageResult.getTotal());
+        }
+
+        // 6. 转换查询结果为响应DTO
+        List<TeacherQueryRespDTO> teacherList = pageResult.getRecords().stream()
+                .map(this::convertToDTO)
+                .toList();
+
+        // 7. 构建分页响应信息
+        TeacherPageQueryRespDTO respDTO = new TeacherPageQueryRespDTO();
+        respDTO.setCurrent(pageResult.getCurrent());
+        respDTO.setSize(pageResult.getSize());
+        respDTO.setTotal(pageResult.getTotal());
+        respDTO.setPages(pageResult.getPages());
+        respDTO.setRecords(teacherList);
+        respDTO.setHasPrevious(pageResult.getCurrent() > 1);
+        respDTO.setHasNext(pageResult.getCurrent() < pageResult.getPages());
+
+        log.info("=== 教师分页查询完成 ===");
+        log.info("返回结果: 当前页={}, 每页大小={}, 总记录数={}, 实际返回记录数={}", 
+                respDTO.getCurrent(), respDTO.getSize(), respDTO.getTotal(), teacherList.size());
+
+        return respDTO;
+    }
+
+    /**
+     * 将 TeacherDO 转换为 TeacherQueryRespDTO
+     * 
+     * @param teacherDO 教师DO对象
+     * @return 教师查询响应DTO
+     */
+    private TeacherQueryRespDTO convertToDTO(TeacherDO teacherDO) {
+        TeacherQueryRespDTO dto = new TeacherQueryRespDTO();
+        dto.setId(teacherDO.getId());
+        dto.setUsername(teacherDO.getUsername());
+        dto.setRealName(teacherDO.getRealName());
+        dto.setGender(teacherDO.getGender());
+        
+        // 转换性别描述
+        if (teacherDO.getGender() != null) {
+            dto.setGenderDesc(teacherDO.getGender() == 0 ? "女" : "男");
+        }
+        
+        dto.setPhone(teacherDO.getPhone());
+        dto.setTeacherNo(teacherDO.getTeacherNo());
+        dto.setSchool(teacherDO.getSchool());
+        dto.setCollege(teacherDO.getCollege());
+        dto.setCreateTime(teacherDO.getCreateTime());
+        dto.setUpdateTime(teacherDO.getUpdateTime());
+        
+        return dto;
     }
 }
