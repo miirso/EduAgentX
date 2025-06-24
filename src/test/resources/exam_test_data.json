@@ -1,0 +1,108 @@
+{
+  "startExam_request": {
+    "studentId": 123456789,
+    "paperId": 15
+  },
+  "startExam_response": {
+    "code": "0",
+    "message": "success",
+    "data": {
+      "examRecordId": 89,
+      "paperDetail": {
+        "id": 15,
+        "courseId": "2500010B",
+        "chapterId": 3,
+        "paperName": "第3章 3D图形基础与投影 - 章节测试",
+        "paperType": "chapter",
+        "totalQuestions": 3,
+        "totalScore": 100,
+        "timeLimit": 60,
+        "difficulty": "medium",
+        "status": "active",
+        "aiGenerated": true,
+        "createTime": "2025-06-23T14:30:00",
+        "questions": [
+          {
+            "id": 45,
+            "questionType": "single_choice",
+            "questionText": "在计算机图形学中，将三维坐标转换为二维屏幕坐标的过程称为？",
+            "questionOrder": 1,
+            "score": 30,
+            "difficulty": "easy",
+            "options": [
+              {
+                "id": 180,
+                "optionLabel": "A",
+                "optionText": "投影变换",
+                "optionOrder": 1
+              },
+              {
+                "id": 181,
+                "optionLabel": "B",
+                "optionText": "视口变换",
+                "optionOrder": 2
+              },
+              {
+                "id": 182,
+                "optionLabel": "C",
+                "optionText": "模型变换",
+                "optionOrder": 3
+              },
+              {
+                "id": 183,
+                "optionLabel": "D",
+                "optionText": "观察变换",
+                "optionOrder": 4
+              }
+            ]
+          },
+          {
+            "id": 46,
+            "questionType": "multiple_choice",
+            "questionText": "透视投影具有以下哪些特点？（多选）",
+            "questionOrder": 2,
+            "score": 30,
+            "difficulty": "medium",
+            "options": [
+              {
+                "id": 184,
+                "optionLabel": "A",
+                "optionText": "远处的物体看起来更小",
+                "optionOrder": 1
+              },
+              {
+                "id": 185,
+                "optionLabel": "B",
+                "optionText": "具有消失点",
+                "optionOrder": 2
+              },
+              {
+                "id": 186,
+                "optionLabel": "C",
+                "optionText": "平行线保持平行",
+                "optionOrder": 3
+              },
+              {
+                "id": 187,
+                "optionLabel": "D",
+                "optionText": "符合人眼观察习惯",
+                "optionOrder": 4
+              }
+            ]
+          },
+          {
+            "id": 47,
+            "questionType": "short_answer",
+            "questionText": "请简述透视投影和正交投影的主要区别，并说明它们各自的应用场景。",
+            "questionOrder": 3,
+            "score": 40,
+            "difficulty": "hard",
+            "options": []
+          }
+        ]
+      },
+      "startTime": "2025-06-23T15:00:00",
+      "message": "答题开始，祝您考试顺利！"
+    }
+  }
+}

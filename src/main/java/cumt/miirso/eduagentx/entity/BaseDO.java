@@ -16,6 +16,11 @@ public class BaseDO {
     private Date createTime;
 
     private Date updateTime;
+    
+    /**
+     * 删除时间
+     */
+    private Date deleteTime;
 
     private Boolean tag;
 
