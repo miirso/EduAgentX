@@ -26,9 +26,8 @@ public class MybatisPlusConfig {
     @Bean
     public MybatisPlusInterceptor mybatisPlusInterceptor() {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
-        
-        // 添加分页插件
-        PaginationInnerInterceptor paginationInterceptor = new PaginationInnerInterceptor(DbType.MYSQL);
+          // 添加分页插件
+        PaginationInnerInterceptor paginationInterceptor = new PaginationInnerInterceptor(DbType.POSTGRE_SQL);
         
         // 配置分页插件参数
         paginationInterceptor.setMaxLimit(500L); // 单页分页条数限制(默认无限制)
