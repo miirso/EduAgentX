@@ -500,39 +500,7 @@ ALTER TABLE student_exam_records OWNER TO miirso;
 ALTER TABLE student_answer_details OWNER TO miirso;
 ALTER TABLE ai_teaching_suggestions OWNER TO miirso;
 
-CREATE TABLE course_qa (
-id serial PRIMARY KEY,
-course_id varchar(8) NOT NULL,         -- 与 courses.id 保持一致
-student_id char(10) NOT NULL,          -- 与 student.id 保持一致
-question_content text NOT NULL,
-is_collected boolean DEFAULT false,
-create_time timestamp DEFAULT CURRENT_TIMESTAMP
-);
 
-COMMENT ON TABLE course_qa IS '课程QA表';
-COMMENT ON COLUMN course_qa.id IS '主键ID';
-COMMENT ON COLUMN course_qa.course_id IS '课程ID';
-COMMENT ON COLUMN course_qa.student_id IS '提问学生ID';
-COMMENT ON COLUMN course_qa.question_content IS '问题内容';
-COMMENT ON COLUMN course_qa.is_collected IS '是否被教师收录';
-COMMENT ON COLUMN course_qa.create_time IS '创建时间';
-
-CREATE TABLE course_qa_answer (
-id serial PRIMARY KEY,
-qa_id integer NOT NULL REFERENCES course_qa(id),
-answer_user_id char(10) NOT NULL,      -- 与 student/teacher.id 保持一致
-answer_user_role varchar(16) NOT NULL, -- student/teacher
-answer_content text NOT NULL,
-create_time timestamp DEFAULT CURRENT_TIMESTAMP
-);
-
-COMMENT ON TABLE course_qa_answer IS '课程QA回答表';
-COMMENT ON COLUMN course_qa_answer.id IS '主键ID';
-COMMENT ON COLUMN course_qa_answer.qa_id IS '所属QA问题ID';
-COMMENT ON COLUMN course_qa_answer.answer_user_id IS '回答者ID';
-COMMENT ON COLUMN course_qa_answer.answer_user_role IS '回答者角色 student/teacher';
-COMMENT ON COLUMN course_qa_answer.answer_content IS '回答内容';
-COMMENT ON COLUMN course_qa_answer.create_time IS '回答时间';
 
 CREATE TABLE course_discussion (
 id serial PRIMARY KEY,
@@ -573,3 +541,67 @@ COMMENT ON COLUMN course_evaluation.teaching_score IS '教学质量评分 1-5';
 COMMENT ON COLUMN course_evaluation.harvest_score IS '收获程度评分 1-5';
 COMMENT ON COLUMN course_evaluation.comment IS '评价内容';
 COMMENT ON COLUMN course_evaluation.create_time IS '评价时间';
+
+### 课程QA表结构修正
+
+#### 1. 课程QA问题表（course_qa）
+- id: bigint, 主键，自增
+- course_id: varchar(20), 课程ID
+- student_id: bigint, 提问者ID
+- title: varchar(200), 问题标题
+- content: text, 问题内容
+- create_time: timestamp
+- update_time: timestamp
+- status: varchar(20), 状态（active/deleted）
+
+#### 2. 课程QA回答表（course_qa_answer）
+- id: bigint, 主键，自增
+- qa_id: bigint, 所属问题ID（外键，course_qa.id）
+- answerer_id: bigint, 回答者ID（可为学生/教师）
+- answerer_type: varchar(10), 回答者类型（student/teacher）
+- content: text, 回答内容
+- create_time: timestamp
+- update_time: timestamp
+- status: varchar(20), 状态（active/deleted）
+
+---
+#### PostgreSQL兼容建议
+- id建议bigserial
+- content建议text
+- status建议varchar(20)
+
+
+-- 课程QA问题表
+CREATE TABLE course_qa (
+id              bigserial PRIMARY KEY,         -- 问题ID
+course_id       varchar(8) NOT NULL,           -- 课程ID
+student_id      char(10) NOT NULL,             -- 提问学生ID
+title           varchar(200) NOT NULL,         -- 问题标题
+content         text NOT NULL,                 -- 问题内容
+create_time     timestamp DEFAULT CURRENT_TIMESTAMP,
+update_time     timestamp DEFAULT CURRENT_TIMESTAMP,
+status          varchar(20) DEFAULT 'active'   -- 状态
+);
+
+COMMENT ON TABLE course_qa IS '课程QA问题表';
+COMMENT ON COLUMN course_qa.student_id IS '提问学生ID，char(10)，与student.id一致';
+
+-- 如已存在answer_user_id、answer_content字段，删除SQL如下：
+-- ALTER TABLE course_qa DROP COLUMN IF EXISTS answer_user_id;
+-- ALTER TABLE course_qa DROP COLUMN IF EXISTS answer_content;
+
+-- 课程QA回答表
+CREATE TABLE course_qa_answer (
+id              bigserial PRIMARY KEY,         -- 回答ID
+qa_id           bigint NOT NULL REFERENCES course_qa(id), -- 所属问题ID
+answerer_id     char(10) NOT NULL,             -- 回答者ID（学生/教师）
+answerer_type   varchar(16) NOT NULL,          -- 回答者类型 student/teacher
+content         text NOT NULL,                 -- 回答内容
+create_time     timestamp DEFAULT CURRENT_TIMESTAMP,
+update_time     timestamp DEFAULT CURRENT_TIMESTAMP,
+status          varchar(20) DEFAULT 'active'   -- 状态
+);
+
+COMMENT ON TABLE course_qa_answer IS '课程QA回答表';
+COMMENT ON COLUMN course_qa_answer.answerer_id IS '回答者ID，char(10)，与student/teacher.id一致';
+COMMENT ON COLUMN course_qa_answer.answerer_type IS 'student/teacher';

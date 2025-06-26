@@ -9,15 +9,37 @@ import java.util.Date;
 @Data
 @TableName("course_qa")
 public class CourseQaDO {
+    /**
+     * 问题ID，对应course_qa表id主键
+     */
     @TableId(type = IdType.AUTO)
     private Long id;
+    /**
+     * 课程ID，对应course_qa表course_id
+     */
     private String courseId;
+    /**
+     * 提问学生ID，对应course_qa表student_id
+     */
     private Long studentId;
+    /**
+     * 问题内容，对应course_qa表question_content
+     */
     private String questionContent;
-    private String answerContent;
-    private Long answerUserId;
-    private Integer isCollected; // 1=收录, 0=未收录
-    private String status; // open/solved/collected
+    /**
+     * 是否被教师收录，1=收录，0=未收录，对应course_qa表is_collected
+     */
+    private Integer isCollected;
+    /**
+     * 问题状态，如open/solved/collected，对应course_qa表status
+     */
+    private String status;
+    /**
+     * 创建时间，对应course_qa表create_time
+     */
     private Date createTime;
+    /**
+     * 更新时间，对应course_qa表update_time
+     */
     private Date updateTime;
 }
