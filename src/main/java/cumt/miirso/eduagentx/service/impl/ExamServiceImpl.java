@@ -14,12 +14,8 @@ import cumt.miirso.eduagentx.entity.ExamQuestionDO;
 import cumt.miirso.eduagentx.entity.ExamQuestionOptionDO;
 import cumt.miirso.eduagentx.entity.StudentExamRecordDO;
 import cumt.miirso.eduagentx.entity.StudentAnswerDetailDO;
-import cumt.miirso.eduagentx.mapper.ExamPaperMapper;
-import cumt.miirso.eduagentx.mapper.ExamQuestionAnswerMapper;
-import cumt.miirso.eduagentx.mapper.ExamQuestionMapper;
-import cumt.miirso.eduagentx.mapper.ExamQuestionOptionMapper;
-import cumt.miirso.eduagentx.mapper.StudentExamRecordMapper;
-import cumt.miirso.eduagentx.mapper.StudentAnswerDetailMapper;
+import cumt.miirso.eduagentx.entity.AITeachingSuggestionDO;
+import cumt.miirso.eduagentx.mapper.*;
 import cumt.miirso.eduagentx.service.ExamService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,11 +24,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Comparator;
+import java.util.stream.Collectors;
 
 /**
  * 试题管理服务实现类
@@ -49,6 +48,7 @@ public class ExamServiceImpl extends ServiceImpl<ExamPaperMapper, ExamPaperDO> i
     private final ExamQuestionAnswerMapper examQuestionAnswerMapper;
     private final StudentExamRecordMapper studentExamRecordMapper;
     private final StudentAnswerDetailMapper studentAnswerDetailMapper;
+    private final AITeachingSuggestionMapper aiTeachingSuggestionsMapper;
 
     /**
      * 保存试题
@@ -1043,8 +1043,8 @@ public class ExamServiceImpl extends ServiceImpl<ExamPaperMapper, ExamPaperDO> i
             //     "paperId": 1,                    // 试卷ID
             //     "paperName": "第3章 3D图形基础与投影 - 章节测试",  // 试卷名称
             //     "studentCount": 1,               // 学生数量
-            //     "averageScore": 20.00,           // 平均分
-            //     "highestScore": 20               // 最高分
+            //     "averageScore": 20.00,           // 试卷平均分
+            //     "highestScore": 20               // 试卷最高分
             //   }
             // ]
             int paperStudentCount = (int) paperRecords.stream()
@@ -1183,28 +1183,437 @@ public class ExamServiceImpl extends ServiceImpl<ExamPaperMapper, ExamPaperDO> i
 
     @Override
     public ExamStatisticsRespDTO getPaperStatistics(Integer paperId) {
-        return null;
+        log.info("=== 开始执行[获取试卷统计数据] ===");
+        log.info("试卷ID: {}", paperId);
+
+        // 1. 参数验证
+        if (paperId == null || paperId <= 0) {
+            log.error("试卷ID无效: {}", paperId);
+            throw new IllegalArgumentException("试卷ID无效");
+        }
+
+        // 2. 查询试卷信息
+        ExamPaperDO examPaper = this.getById(paperId);
+        if (examPaper == null) {
+            log.error("试卷不存在，ID: {}", paperId);
+            throw new IllegalArgumentException("试卷不存在");
+        }
+
+        // 3. 查询所有已提交的答题记录
+        List<StudentExamRecordDO> examRecords = studentExamRecordMapper.selectList(
+                new LambdaQueryWrapper<StudentExamRecordDO>()
+                        .eq(StudentExamRecordDO::getPaperId, paperId)
+                        .eq(StudentExamRecordDO::getStatus, "submitted")
+        );
+
+        // 如果没有答题记录，返回包含基本试卷信息的空统计对象
+        if (examRecords.isEmpty()) {
+            log.info("试卷没有学生答题记录，试卷ID: {}", paperId);
+            ExamStatisticsRespDTO emptyResponse = new ExamStatisticsRespDTO();
+            emptyResponse.setStatisticsType("paper");
+            emptyResponse.setTargetId(String.valueOf(paperId));
+            emptyResponse.setPaperId(paperId);
+            emptyResponse.setCourseId(examPaper.getCourseId());
+            return emptyResponse;
+        }
+
+        // 4. 统计核心数据
+        int examCount = examRecords.size();
+        long participantCount = examRecords.stream().map(StudentExamRecordDO::getStudentId).distinct().count();
+        double averageScore = examRecords.stream().mapToInt(StudentExamRecordDO::getTotalScore).average().orElse(0);
+        int highestScore = examRecords.stream().mapToInt(StudentExamRecordDO::getTotalScore).max().orElse(0);
+        int lowestScore = examRecords.stream().mapToInt(StudentExamRecordDO::getTotalScore).min().orElse(0);
+
+        // 计算平均正确率
+        BigDecimal averageAccuracyRate = examRecords.stream()
+                .map(StudentExamRecordDO::getAccuracyRate)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .divide(new BigDecimal(examCount), 2, RoundingMode.HALF_UP);
+
+        // 计算及格率 (60%)
+        double passScoreLine = examPaper.getTotalScore() * 0.6;
+        long passCount = examRecords.stream().filter(r -> r.getTotalScore() >= passScoreLine).count();
+        BigDecimal passRate = BigDecimal.valueOf(passCount)
+                .divide(BigDecimal.valueOf(examCount), 4, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100));
+
+        // 计算分数分布
+        Map<String, Integer> scoreDistribution = calculateScoreDistribution(examRecords, examPaper.getTotalScore());
+
+        // 5. 统计各题目正确率
+        List<ExamStatisticsRespDTO.QuestionAccuracyDTO> questionAccuracyList = calculateQuestionAccuracy(paperId, examRecords);
+
+        // 6. 找出错误率最高的题目
+        List<ExamStatisticsRespDTO.ProblemQuestionDTO> problemQuestionList = findProblemQuestions(questionAccuracyList);
+
+        // 7. 组装返回数据
+        ExamStatisticsRespDTO response = new ExamStatisticsRespDTO();
+        response.setStatisticsType("paper");
+        response.setTargetId(String.valueOf(paperId));
+        response.setPaperId(paperId);
+        response.setPaperName(examPaper.getPaperName());
+        response.setCourseId(examPaper.getCourseId());
+        response.setExamCount(examCount);
+        response.setParticipantCount((int) participantCount);
+        response.setAverageScore(BigDecimal.valueOf(averageScore).setScale(2, RoundingMode.HALF_UP));
+        response.setHighestScore(highestScore);
+        response.setLowestScore(lowestScore);
+        response.setPassRate(passRate.setScale(2, RoundingMode.HALF_UP));
+        response.setAverageAccuracyRate(averageAccuracyRate);
+        response.setOverallAccuracyRate(averageAccuracyRate); // 整体正确率使用平均正确率
+        response.setScoreDistribution(scoreDistribution);
+        response.setQuestionAccuracyList(questionAccuracyList);
+        response.setProblemQuestionList(problemQuestionList);
+
+        log.info("=== 结束执行[获取试卷统计数据] ===");
+        return response;
     }
 
+    /**
+     * 计算分数分布
+     */
+    private Map<String, Integer> calculateScoreDistribution(List<StudentExamRecordDO> examRecords, int totalScore) {
+        Map<String, Integer> distribution = new HashMap<>();
+        distribution.put("90-100", 0);
+        distribution.put("80-89", 0);
+        distribution.put("70-79", 0);
+        distribution.put("60-69", 0);
+        distribution.put("<60", 0);
 
+        if (totalScore == 0) return distribution;
+
+        for (StudentExamRecordDO record : examRecords) {
+            double scoreRate = (double) record.getTotalScore() / totalScore * 100;
+            if (scoreRate >= 90) {
+                distribution.merge("90-100", 1, Integer::sum);
+            } else if (scoreRate >= 80) {
+                distribution.merge("80-89", 1, Integer::sum);
+            } else if (scoreRate >= 70) {
+                distribution.merge("70-79", 1, Integer::sum);
+            } else if (scoreRate >= 60) {
+                distribution.merge("60-69", 1, Integer::sum);
+            } else {
+                distribution.merge("<60", 1, Integer::sum);
+            }
+        }
+        return distribution;
+    }
+
+    /**
+     * 计算各题目正确率
+     */
+    private List<ExamStatisticsRespDTO.QuestionAccuracyDTO> calculateQuestionAccuracy(Integer paperId, List<StudentExamRecordDO> examRecords) {
+        List<ExamQuestionDO> questions = examQuestionMapper.selectList(
+                new LambdaQueryWrapper<ExamQuestionDO>().eq(ExamQuestionDO::getPaperId, paperId)
+        );
+        if (questions.isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<Integer> recordIds = examRecords.stream().map(StudentExamRecordDO::getId).toList();
+        List<StudentAnswerDetailDO> answerDetails = studentAnswerDetailMapper.selectList(
+                new LambdaQueryWrapper<StudentAnswerDetailDO>().in(StudentAnswerDetailDO::getExamRecordId, recordIds)
+        );
+        Map<Integer, List<StudentAnswerDetailDO>> detailsByQuestion = answerDetails.stream()
+                .collect(Collectors.groupingBy(StudentAnswerDetailDO::getQuestionId));
+        return questions.stream().map(question -> {
+            List<StudentAnswerDetailDO> questionAnswers = detailsByQuestion.getOrDefault(question.getId(), new ArrayList<>());
+            long totalAnswers = questionAnswers.size();
+            long correctAnswers = questionAnswers.stream().filter(StudentAnswerDetailDO::getIsCorrect).count();
+            BigDecimal accuracy = (totalAnswers == 0) ? BigDecimal.ZERO :
+                    BigDecimal.valueOf(correctAnswers)
+                            .divide(BigDecimal.valueOf(totalAnswers), 4, RoundingMode.HALF_UP)
+                            .multiply(BigDecimal.valueOf(100));
+            return new ExamStatisticsRespDTO.QuestionAccuracyDTO(
+                question.getId(),
+                question.getQuestionType(),
+                question.getQuestionText(),
+                accuracy.setScale(2, RoundingMode.HALF_UP),
+                (int) totalAnswers
+            );
+        }).collect(Collectors.toList());
+    }
+
+    private List<ExamStatisticsRespDTO.ProblemQuestionDTO> findProblemQuestions(List<ExamStatisticsRespDTO.QuestionAccuracyDTO> accuracyList) {
+        // 取正确率最低的5题，组装为 ProblemQuestionDTO，errorRate=100-accuracyRate
+        return accuracyList.stream()
+                .sorted(Comparator.comparing(ExamStatisticsRespDTO.QuestionAccuracyDTO::getAccuracyRate))
+                .limit(5)
+                .map(q -> {
+                    ExamStatisticsRespDTO.ProblemQuestionDTO problemDTO = new ExamStatisticsRespDTO.ProblemQuestionDTO();
+                    problemDTO.setQuestionId(q.getQuestionId());
+                    problemDTO.setQuestionType(q.getQuestionType());
+                    problemDTO.setQuestionText(q.getQuestionText());
+                    problemDTO.setErrorRate(BigDecimal.valueOf(100).subtract(q.getAccuracyRate()));
+                    // 其余字段如常见错误答案、正确答案、答案解析可后续补充
+                    return problemDTO;
+                }).collect(Collectors.toList());
+    }
 
     @Override
     public ExamStatisticsRespDTO getStudentStatistics(Long studentId, String courseId) {
-        // 将在后续接口实现
-        return null;
+        log.info("=== 开始执行[获取学生课程统计数据] ===");
+        log.info("学生ID: {}, 课程ID: {}", studentId, courseId);
+
+        if (studentId == null || studentId <= 0 || courseId == null || courseId.isEmpty()) {
+            log.error("学生ID或课程ID无效");
+            throw new IllegalArgumentException("学生ID或课程ID无效");
+        }
+
+        // 查询该课程下所有试卷
+        List<ExamPaperDO> examPapers = this.list(
+                new LambdaQueryWrapper<ExamPaperDO>()
+                        .eq(ExamPaperDO::getCourseId, courseId)
+                        .eq(ExamPaperDO::getStatus, "active")
+        );
+        if (examPapers.isEmpty()) {
+            log.info("课程没有试卷，课程ID: {}", courseId);
+            return new ExamStatisticsRespDTO();
+        }
+        List<Integer> paperIds = examPapers.stream().map(ExamPaperDO::getId).toList();
+
+        // 查询该学生在这些试卷下的所有答题记录
+        List<StudentExamRecordDO> examRecords = studentExamRecordMapper.selectList(
+                new LambdaQueryWrapper<StudentExamRecordDO>()
+                        .eq(StudentExamRecordDO::getStudentId, studentId)
+                        .in(StudentExamRecordDO::getPaperId, paperIds)
+                        .eq(StudentExamRecordDO::getStatus, "submitted")
+        );
+        if (examRecords.isEmpty()) {
+            log.info("学生在该课程下没有答题记录，学生ID: {}, 课程ID: {}", studentId, courseId);
+            ExamStatisticsRespDTO emptyResp = new ExamStatisticsRespDTO();
+            emptyResp.setStatisticsType("student");
+            emptyResp.setTargetId(String.valueOf(studentId));
+            emptyResp.setStudentId(studentId);
+            emptyResp.setCourseId(courseId);
+            return emptyResp;
+        }
+
+        // 统计数据
+        int examCount = examRecords.size();
+        int totalScore = examRecords.stream().mapToInt(StudentExamRecordDO::getTotalScore).sum();
+        double averageScore = examRecords.stream().mapToInt(StudentExamRecordDO::getTotalScore).average().orElse(0);
+        int highestScore = examRecords.stream().mapToInt(StudentExamRecordDO::getTotalScore).max().orElse(0);
+        int lowestScore = examRecords.stream().mapToInt(StudentExamRecordDO::getTotalScore).min().orElse(0);
+        BigDecimal averageAccuracyRate = examRecords.stream()
+                .map(StudentExamRecordDO::getAccuracyRate)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .divide(new BigDecimal(examCount), 2, RoundingMode.HALF_UP);
+
+        // 分数分布
+        int fullScore = examPapers.isEmpty() ? 100 : examPapers.get(0).getTotalScore();
+        Map<String, Integer> scoreDistribution = calculateScoreDistribution(examRecords, fullScore);
+
+        // 题目正确率统计
+        List<ExamStatisticsRespDTO.QuestionAccuracyDTO> questionAccuracyList = calculateQuestionAccuracyForStudent(examPapers, examRecords, studentId);
+
+        // 章节正确率统计
+        List<ExamStatisticsRespDTO.ChapterAccuracyDTO> chapterAccuracyList = calculateChapterAccuracyForStudent(examPapers, examRecords, studentId);
+
+        // 常错题目
+        List<ExamStatisticsRespDTO.ProblemQuestionDTO> problemQuestionList = findProblemQuestions(questionAccuracyList);
+
+        // 组装返回
+        ExamStatisticsRespDTO resp = new ExamStatisticsRespDTO();
+        resp.setStatisticsType("student");
+        resp.setTargetId(String.valueOf(studentId));
+        resp.setStudentId(studentId);
+        resp.setCourseId(courseId);
+        resp.setExamCount(examCount);
+        resp.setTotalScore(totalScore);
+        resp.setAverageScore(BigDecimal.valueOf(averageScore).setScale(2, RoundingMode.HALF_UP));
+        resp.setHighestScore(highestScore);
+        resp.setLowestScore(lowestScore);
+        resp.setAverageAccuracyRate(averageAccuracyRate);
+        resp.setOverallAccuracyRate(averageAccuracyRate);
+        resp.setScoreDistribution(scoreDistribution);
+        resp.setQuestionAccuracyList(questionAccuracyList);
+        resp.setChapterAccuracyList(chapterAccuracyList);
+        resp.setProblemQuestionList(problemQuestionList);
+        resp.setParticipantCount(1);
+        resp.setCompletedCount(examCount);
+        resp.setStudentCount(1);
+        resp.setPaperStatisticsList(new ArrayList<>());
+        log.info("=== 结束执行[获取学生课程统计数据] ===");
+        return resp;
+    }
+
+    // 学生题目正确率统计
+    private List<ExamStatisticsRespDTO.QuestionAccuracyDTO> calculateQuestionAccuracyForStudent(List<ExamPaperDO> examPapers, List<StudentExamRecordDO> examRecords, Long studentId) {
+        List<Integer> paperIds = examPapers.stream().map(ExamPaperDO::getId).toList();
+        List<ExamQuestionDO> questions = examQuestionMapper.selectList(
+                new LambdaQueryWrapper<ExamQuestionDO>().in(ExamQuestionDO::getPaperId, paperIds)
+        );
+        if (questions.isEmpty()) return new ArrayList<>();
+        List<Integer> recordIds = examRecords.stream().map(StudentExamRecordDO::getId).toList();
+        List<StudentAnswerDetailDO> answerDetails = studentAnswerDetailMapper.selectList(
+                new LambdaQueryWrapper<StudentAnswerDetailDO>().in(StudentAnswerDetailDO::getExamRecordId, recordIds)
+        );
+        Map<Integer, List<StudentAnswerDetailDO>> detailsByQuestion = answerDetails.stream()
+                .collect(Collectors.groupingBy(StudentAnswerDetailDO::getQuestionId));
+        return questions.stream().map(question -> {
+            List<StudentAnswerDetailDO> questionAnswers = detailsByQuestion.getOrDefault(question.getId(), new ArrayList<>());
+            long totalAnswers = questionAnswers.size();
+            long correctAnswers = questionAnswers.stream().filter(StudentAnswerDetailDO::getIsCorrect).count();
+            BigDecimal accuracy = (totalAnswers == 0) ? BigDecimal.ZERO :
+                    BigDecimal.valueOf(correctAnswers)
+                            .divide(BigDecimal.valueOf(totalAnswers), 4, RoundingMode.HALF_UP)
+                            .multiply(BigDecimal.valueOf(100));
+            return new ExamStatisticsRespDTO.QuestionAccuracyDTO(
+                question.getId(),
+                question.getQuestionType(),
+                question.getQuestionText(),
+                accuracy.setScale(2, RoundingMode.HALF_UP),
+                (int) totalAnswers
+            );
+        }).collect(Collectors.toList());
+    }
+
+    // 学生章节正确率统计
+    private List<ExamStatisticsRespDTO.ChapterAccuracyDTO> calculateChapterAccuracyForStudent(List<ExamPaperDO> examPapers, List<StudentExamRecordDO> examRecords, Long studentId) {
+        Map<Integer, ExamStatisticsRespDTO.ChapterAccuracyDTO> chapterMap = new HashMap<>();
+        for (ExamPaperDO paper : examPapers) {
+            Integer chapterId = paper.getChapterId();
+            if (chapterId == null) continue;
+            List<StudentExamRecordDO> paperRecords = examRecords.stream()
+                    .filter(r -> r.getPaperId().equals(paper.getId()))
+                    .toList();
+            if (paperRecords.isEmpty()) continue;
+            BigDecimal sumAccuracy = paperRecords.stream().map(StudentExamRecordDO::getAccuracyRate).reduce(BigDecimal.ZERO, BigDecimal::add);
+            int count = paperRecords.size();
+            ExamStatisticsRespDTO.ChapterAccuracyDTO dto = new ExamStatisticsRespDTO.ChapterAccuracyDTO();
+            dto.setChapterId(chapterId);
+            dto.setChapterName("章节-" + chapterId);
+            dto.setAnswerCount(count);
+            dto.setAccuracyRate(count > 0 ? sumAccuracy.divide(BigDecimal.valueOf(count), 2, RoundingMode.HALF_UP) : BigDecimal.ZERO);
+            chapterMap.put(chapterId, dto);
+        }
+        return new ArrayList<>(chapterMap.values());
     }
 
     @Override
     public Boolean saveSuggestion(SaveSuggestionReqDTO requestParam) {
-        // 将在后续接口实现
-        return null;
+        log.info("=== 开始执行[保存AI教学建议] ===");
+        log.info("参数信息: {}", requestParam);
+
+        // 1. 参数验证
+        if (requestParam == null || requestParam.getCourseId() == null) {
+            log.error("请求参数或课程ID为空");
+            throw new IllegalArgumentException("请求参数或课程ID不能为空");
+        }
+
+        // 2. 创建实体对象
+        AITeachingSuggestionDO suggestion = new AITeachingSuggestionDO();
+        suggestion.setCourseId(requestParam.getCourseId());
+        suggestion.setPaperId(requestParam.getPaperId());
+        suggestion.setStudentId(requestParam.getStudentId());
+        suggestion.setSuggestionType(requestParam.getSuggestionType());
+        suggestion.setSuggestionTitle(requestParam.getSuggestionTitle());
+        suggestion.setSuggestionContent(requestParam.getSuggestionContent());
+        suggestion.setBasedOnData(requestParam.getBasedOnData());
+        suggestion.setAiModel(requestParam.getAiModel());
+
+        // 3. 保存到数据库
+        boolean result = aiTeachingSuggestionsMapper.insert(suggestion) > 0;
+
+        if (result) {
+            log.info("AI教学建议保存成功");
+        } else {
+            log.error("AI教学建议保存失败");
+        }
+
+        log.info("=== 结束执行[保存AI教学建议] ===");
+        return result;
     }
 
     @Override
     public List<AITeachingSuggestionRespDTO> getSuggestions(String type, String targetId) {
-        // 将在后续接口实现
-        return null;
-    }    /**
+        log.info("=== 开始执行[获取AI教学建议] ===");
+        log.info("建议类型: {}, 目标ID: {}", type, targetId);
+
+        // 1. 参数验证
+        if (type == null || type.isEmpty() || targetId == null || targetId.isEmpty()) {
+            log.error("建议类型或目标ID为空");
+            throw new IllegalArgumentException("建议类型或目标ID不能为空");
+        }
+
+        // 2. 查询建议
+        LambdaQueryWrapper<AITeachingSuggestionDO> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(AITeachingSuggestionDO::getSuggestionType, type);
+
+        // 根据类型判断目标ID是课程ID还是试卷ID
+        if ("course_general".equals(type)) {
+            queryWrapper.eq(AITeachingSuggestionDO::getCourseId, targetId);
+        } else if ("paper_specific".equals(type)) {
+            queryWrapper.eq(AITeachingSuggestionDO::getPaperId, Integer.parseInt(targetId));
+        } else {
+            log.error("不支持的建议类型: {}", type);
+            throw new IllegalArgumentException("不支持的建议类型");
+        }
+
+        List<AITeachingSuggestionDO> suggestions = aiTeachingSuggestionsMapper.selectList(queryWrapper);
+
+        // 3. 组装返回数据
+        List<AITeachingSuggestionRespDTO> response = suggestions.stream().map(s -> {
+            AITeachingSuggestionRespDTO dto = new AITeachingSuggestionRespDTO();
+            dto.setId(s.getId());
+            dto.setCourseId(s.getCourseId());
+            dto.setPaperId(s.getPaperId());
+            dto.setStudentId(s.getStudentId());
+            dto.setSuggestionType(s.getSuggestionType());
+            dto.setSuggestionTitle(s.getSuggestionTitle());
+            dto.setSuggestionContent(s.getSuggestionContent());
+            dto.setBasedOnData(s.getBasedOnData());
+            dto.setAiModel(s.getAiModel());
+            dto.setCreateTime(s.getCreateTime());
+            return dto;
+        }).toList();
+
+        log.info("=== 结束执行[获取AI教学建议] ===");
+        return response;
+    }
+
+    @Override
+    public StudentPaperStatsRespDTO getStudentPaperStatistics(Long studentId, Integer paperId) {
+        log.info("=== 开始执行[获取学生试卷统计数据] ===");
+        log.info("学生ID: {}, 试卷ID: {}", studentId, paperId);
+
+        // 1. 参数验证
+        if (studentId == null || studentId <= 0 || paperId == null || paperId <= 0) {
+            log.error("学生ID或试卷ID无效");
+            throw new IllegalArgumentException("学生ID或试卷ID无效");
+        }
+
+        // 2. 查询学生答题记录
+        StudentExamRecordDO examRecord = studentExamRecordMapper.selectOne(
+                new LambdaQueryWrapper<StudentExamRecordDO>()
+                        .eq(StudentExamRecordDO::getStudentId, studentId)
+                        .eq(StudentExamRecordDO::getPaperId, paperId)
+                        .eq(StudentExamRecordDO::getStatus, "submitted")
+        );
+
+        if (examRecord == null) {
+            log.warn("未找到学生ID: {} 对于试卷ID: {} 的答题记录", studentId, paperId);
+            return null;
+        }
+
+        // 3. 组装返回数据
+        StudentPaperStatsRespDTO response = new StudentPaperStatsRespDTO();
+        response.setStudentId(examRecord.getStudentId());
+        response.setPaperId(examRecord.getPaperId());
+        response.setTotalScore(examRecord.getTotalScore());
+        response.setCorrectCount(examRecord.getCorrectCount());
+        response.setWrongCount(examRecord.getWrongCount());
+        response.setAccuracyRate(examRecord.getAccuracyRate());
+        response.setTimeSpent(examRecord.getTimeSpent());
+        response.setStatus(examRecord.getStatus());
+        response.setStartTime(new Timestamp(examRecord.getStartTime().getTime()));
+        response.setSubmitTime(new Timestamp(examRecord.getSubmitTime().getTime()));
+
+        log.info("=== 结束执行[获取学生试卷统计数据] ===");
+        return response;
+    }
+    
+    /**
      * 题目错误率统计辅助类
      * 用于统计每个题目的回答次数和错误次数，计算错误率
      */

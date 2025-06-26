@@ -204,4 +204,14 @@ public interface ExamService extends IService<ExamPaperDO> {
      * @return AI建议列表
      */
     List<AITeachingSuggestionRespDTO> getSuggestions(String type, String targetId);
+
+
+    /**
+     * 获取一个学生对一张试卷的统计数据
+     *
+     * @param studentId 学生ID
+     * @param paperId 试卷ID
+     * @return 学生对试卷的统计数据
+     */
+    StudentPaperStatsRespDTO getStudentPaperStatistics(Long studentId, Integer paperId);
 }

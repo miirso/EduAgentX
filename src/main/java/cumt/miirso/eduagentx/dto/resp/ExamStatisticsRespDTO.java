@@ -1,6 +1,9 @@
 package cumt.miirso.eduagentx.dto.resp;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -165,6 +168,9 @@ public class ExamStatisticsRespDTO {
      * 题目正确率DTO
      */
     @Data
+    @Setter
+    @Getter
+    @AllArgsConstructor
     public static class QuestionAccuracyDTO {
         /**
          * 题目ID
