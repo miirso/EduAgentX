@@ -356,7 +356,7 @@ CREATE TABLE exam_questions
     id              SERIAL PRIMARY KEY,                    -- 题目ID
     paper_id        INTEGER NOT NULL,                      -- 试卷ID
     question_type   VARCHAR(20) NOT NULL,                  -- 题目类型：single_choice、multiple_choice、short_answer
-    question_text   TEXT NOT NULL,                         -- 题目内容
+    question_content   TEXT NOT NULL,                         -- 题目内容
     question_order  INTEGER NOT NULL,                      -- 题目在试卷中的顺序
     score           INTEGER DEFAULT 5,                     -- 题目分值
     difficulty      VARCHAR(20) DEFAULT 'medium',          -- 难度等级
@@ -378,7 +378,7 @@ CREATE TABLE exam_question_options
     id              SERIAL PRIMARY KEY,                    -- 选项ID
     question_id     INTEGER NOT NULL,                      -- 题目ID
     option_label    VARCHAR(5) NOT NULL,                   -- 选项标签（A、B、C、D等）
-    option_text     TEXT NOT NULL,                         -- 选项内容
+    option_content     TEXT NOT NULL,                         -- 选项内容
     option_order    INTEGER NOT NULL,                      -- 选项顺序
     is_correct      BOOLEAN DEFAULT FALSE,                 -- 是否为正确答案
     create_time     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,   -- 创建时间
@@ -500,4 +500,76 @@ ALTER TABLE student_exam_records OWNER TO miirso;
 ALTER TABLE student_answer_details OWNER TO miirso;
 ALTER TABLE ai_teaching_suggestions OWNER TO miirso;
 
+CREATE TABLE course_qa (
+id serial PRIMARY KEY,
+course_id varchar(8) NOT NULL,         -- 与 courses.id 保持一致
+student_id char(10) NOT NULL,          -- 与 student.id 保持一致
+question_content text NOT NULL,
+is_collected boolean DEFAULT false,
+create_time timestamp DEFAULT CURRENT_TIMESTAMP
+);
 
+COMMENT ON TABLE course_qa IS '课程QA表';
+COMMENT ON COLUMN course_qa.id IS '主键ID';
+COMMENT ON COLUMN course_qa.course_id IS '课程ID';
+COMMENT ON COLUMN course_qa.student_id IS '提问学生ID';
+COMMENT ON COLUMN course_qa.question_content IS '问题内容';
+COMMENT ON COLUMN course_qa.is_collected IS '是否被教师收录';
+COMMENT ON COLUMN course_qa.create_time IS '创建时间';
+
+CREATE TABLE course_qa_answer (
+id serial PRIMARY KEY,
+qa_id integer NOT NULL REFERENCES course_qa(id),
+answer_user_id char(10) NOT NULL,      -- 与 student/teacher.id 保持一致
+answer_user_role varchar(16) NOT NULL, -- student/teacher
+answer_content text NOT NULL,
+create_time timestamp DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE course_qa_answer IS '课程QA回答表';
+COMMENT ON COLUMN course_qa_answer.id IS '主键ID';
+COMMENT ON COLUMN course_qa_answer.qa_id IS '所属QA问题ID';
+COMMENT ON COLUMN course_qa_answer.answer_user_id IS '回答者ID';
+COMMENT ON COLUMN course_qa_answer.answer_user_role IS '回答者角色 student/teacher';
+COMMENT ON COLUMN course_qa_answer.answer_content IS '回答内容';
+COMMENT ON COLUMN course_qa_answer.create_time IS '回答时间';
+
+CREATE TABLE course_discussion (
+id serial PRIMARY KEY,
+course_id varchar(8) NOT NULL,         -- 与 courses.id 保持一致
+user_id char(10) NOT NULL,             -- 与 student/teacher.id 保持一致
+user_role varchar(16) NOT NULL,        -- student/teacher
+content text NOT NULL,
+create_time timestamp DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE course_discussion IS '课程讨论区表';
+COMMENT ON COLUMN course_discussion.id IS '主键ID';
+COMMENT ON COLUMN course_discussion.course_id IS '课程ID';
+COMMENT ON COLUMN course_discussion.user_id IS '发言用户ID';
+COMMENT ON COLUMN course_discussion.user_role IS '用户角色 student/teacher';
+COMMENT ON COLUMN course_discussion.content IS '讨论内容';
+COMMENT ON COLUMN course_discussion.create_time IS '发言时间';
+
+CREATE TABLE course_evaluation (
+id serial PRIMARY KEY,
+course_id varchar(8) NOT NULL,         -- 与 courses.id 保持一致
+student_id char(10) NOT NULL,          -- 与 student.id 保持一致
+content_score int NOT NULL,            -- 内容丰富度评分 1-5
+difficulty_score int NOT NULL,         -- 难度适宜度评分 1-5
+teaching_score int NOT NULL,           -- 教学质量评分 1-5
+harvest_score int NOT NULL,            -- 收获程度评分 1-5
+comment text,
+create_time timestamp DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE course_evaluation IS '课程评价表';
+COMMENT ON COLUMN course_evaluation.id IS '主键ID';
+COMMENT ON COLUMN course_evaluation.course_id IS '课程ID';
+COMMENT ON COLUMN course_evaluation.student_id IS '评价学生ID';
+COMMENT ON COLUMN course_evaluation.content_score IS '内容丰富度评分 1-5';
+COMMENT ON COLUMN course_evaluation.difficulty_score IS '难度适宜度评分 1-5';
+COMMENT ON COLUMN course_evaluation.teaching_score IS '教学质量评分 1-5';
+COMMENT ON COLUMN course_evaluation.harvest_score IS '收获程度评分 1-5';
+COMMENT ON COLUMN course_evaluation.comment IS '评价内容';
+COMMENT ON COLUMN course_evaluation.create_time IS '评价时间';

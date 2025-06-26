@@ -294,7 +294,17 @@ public class StudentServiceImpl extends ServiceImpl<StudentMapper, StudentDO> im
         // 构建并返回登录响应
         StudentLoginRespDTO respDTO = new StudentLoginRespDTO();
         respDTO.setToken(token);
-
+        respDTO.setId(studentDO.getId());
+        respDTO.setUsername(studentDO.getUsername());
+        respDTO.setRealName(studentDO.getRealName());
+        respDTO.setGender(studentDO.getGender());
+        respDTO.setPhone(studentDO.getPhone());
+        respDTO.setEmail(studentDO.getEmail());
+        respDTO.setMajorCode(studentDO.getMajorCode());
+        respDTO.setClassCode(studentDO.getClassCode());
+        respDTO.setCollege(studentDO.getCollege());
+        respDTO.setSchool(studentDO.getSchool());
+        respDTO.setStudentNo(studentDO.getStudentNo());
         log.info("学生用户登录成功: {}", username);
 
         return respDTO;

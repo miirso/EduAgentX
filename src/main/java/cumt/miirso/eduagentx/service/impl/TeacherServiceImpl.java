@@ -162,9 +162,15 @@ public class TeacherServiceImpl extends ServiceImpl<TeacherMapper, TeacherDO> im
         // 构建并返回登录响应
         TeacherLoginRespDTO respDTO = new TeacherLoginRespDTO();
         respDTO.setToken(token);
-        
+        respDTO.setId(teacherDO.getId());
+        respDTO.setUsername(teacherDO.getUsername());
+        respDTO.setRealName(teacherDO.getRealName());
+        respDTO.setGender(teacherDO.getGender());
+        respDTO.setPhone(teacherDO.getPhone());
+        respDTO.setCollege(teacherDO.getCollege());
+        respDTO.setSchool(teacherDO.getSchool());
+        respDTO.setTeacherNo(teacherDO.getTeacherNo());
         log.info("教师用户登录成功: {}", username);
-        
         return respDTO;
     }
 
