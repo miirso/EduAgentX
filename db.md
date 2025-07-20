@@ -605,3 +605,69 @@ status          varchar(20) DEFAULT 'active'   -- 状态
 COMMENT ON TABLE course_qa_answer IS '课程QA回答表';
 COMMENT ON COLUMN course_qa_answer.answerer_id IS '回答者ID，char(10)，与student/teacher.id一致';
 COMMENT ON COLUMN course_qa_answer.answerer_type IS 'student/teacher';
+
+-- 课程教案表（文件存储版本）
+CREATE TABLE course_lesson_plans
+(
+    id                 SERIAL PRIMARY KEY,
+    course_id          VARCHAR(8) NOT NULL,              -- 课程ID
+    chapter_id         INTEGER,                          -- 章节ID（可为空，表示整个课程的教案）
+    plan_file_path     VARCHAR(500) NOT NULL,            -- 教案文件存储路径
+    file_name          VARCHAR(255) NOT NULL,            -- 原始文件名
+    plan_title         VARCHAR(255),                     -- 教案标题
+    plan_type          VARCHAR(20) DEFAULT 'chapter',    -- 教案类型：course(课程)、chapter(章节)
+    version            INTEGER DEFAULT 1,                -- 版本号
+    create_time        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    delete_time        TIMESTAMP,
+    tag                BOOLEAN DEFAULT TRUE,
+    CONSTRAINT unique_course_chapter_lesson_plan_version UNIQUE (course_id, chapter_id, version)
+);
+
+COMMENT ON TABLE course_lesson_plans IS '课程教案表';
+COMMENT ON COLUMN course_lesson_plans.course_id IS '课程ID，对应courses表的id字段';
+COMMENT ON COLUMN course_lesson_plans.chapter_id IS '章节ID，对应chapters表的id字段，为空表示课程教案';
+COMMENT ON COLUMN course_lesson_plans.plan_file_path IS '教案文件在服务器上的存储路径';
+COMMENT ON COLUMN course_lesson_plans.file_name IS '原始上传的文件名';
+COMMENT ON COLUMN course_lesson_plans.plan_title IS '教案标题';
+COMMENT ON COLUMN course_lesson_plans.plan_type IS '教案类型：course(课程教案)、chapter(章节教案)';
+COMMENT ON COLUMN course_lesson_plans.version IS '教案版本号，支持版本管理';
+COMMENT ON COLUMN course_lesson_plans.tag IS '逻辑删除标记';
+
+-- 创建索引
+CREATE INDEX idx_course_lesson_plans_course_id ON course_lesson_plans (course_id);
+CREATE INDEX idx_course_lesson_plans_chapter_id ON course_lesson_plans (chapter_id);
+CREATE INDEX idx_course_lesson_plans_version ON course_lesson_plans (course_id, chapter_id, version);
+
+ALTER TABLE course_lesson_plans OWNER TO miirso;
+
+-- 课程课件表（文件存储版本）
+CREATE TABLE course_courseware
+(
+    id                    SERIAL PRIMARY KEY,
+    course_id             VARCHAR(8) NOT NULL,              -- 课程ID
+    courseware_file_path  VARCHAR(500) NOT NULL,            -- 课件文件存储路径
+    file_name             VARCHAR(255) NOT NULL,            -- 原始文件名
+    courseware_title      VARCHAR(255),                     -- 课件标题
+    courseware_order      INTEGER DEFAULT 1,                -- 课件顺序
+    file_size             BIGINT,                           -- 文件大小（字节）
+    create_time           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    delete_time           TIMESTAMP,
+    tag                   BOOLEAN DEFAULT TRUE
+);
+
+COMMENT ON TABLE course_courseware IS '课程课件表';
+COMMENT ON COLUMN course_courseware.course_id IS '课程ID，对应courses表的id字段';
+COMMENT ON COLUMN course_courseware.courseware_file_path IS '课件文件在服务器上的存储路径';
+COMMENT ON COLUMN course_courseware.file_name IS '原始上传的文件名';
+COMMENT ON COLUMN course_courseware.courseware_title IS '课件标题';
+COMMENT ON COLUMN course_courseware.courseware_order IS '课件在课程中的顺序';
+COMMENT ON COLUMN course_courseware.file_size IS '文件大小（字节）';
+COMMENT ON COLUMN course_courseware.tag IS '逻辑删除标记';
+
+-- 创建索引
+CREATE INDEX idx_course_courseware_course_id ON course_courseware (course_id);
+CREATE INDEX idx_course_courseware_order ON course_courseware (course_id, courseware_order);
+
+ALTER TABLE course_courseware OWNER TO miirso;

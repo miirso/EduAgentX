@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/courseQaAnswer")
+@RequestMapping("/api/eduagentx/course/courseQaAnswer")
 public class CourseQaAnswerController {
     @Autowired
     private CourseQaAnswerService courseQaAnswerService;

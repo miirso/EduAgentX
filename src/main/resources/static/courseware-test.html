@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>课件管理测试页面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button.danger {
+            background-color: #dc3545;
+        }
+        button.danger:hover {
+            background-color: #c82333;
+        }
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .courseware-item {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 10px;
+            background-color: #f9f9f9;
+        }
+        .courseware-item h4 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        .courseware-meta {
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <h1>课件管理测试页面</h1>
+
+    <!-- 上传课件 -->
+    <div class="container">
+        <h2>上传课件</h2>
+        <form id="uploadForm">
+            <div class="form-group">
+                <label for="courseId">课程ID:</label>
+                <input type="text" id="courseId" name="courseId" value="2500010B" required>
+            </div>
+            <div class="form-group">
+                <label for="coursewareTitle">课件标题 (可选):</label>
+                <input type="text" id="coursewareTitle" name="coursewareTitle" placeholder="例如：第一章 计算机图形学概述">
+            </div>
+            <div class="form-group">
+                <label for="coursewareOrder">课件顺序 (可选，留空自动递增):</label>
+                <input type="number" id="coursewareOrder" name="coursewareOrder" min="1">
+            </div>
+            <div class="form-group">
+                <label for="coursewareFile">课件文件 (支持 .ppt, .pptx, .pdf, .doc, .docx):</label>
+                <input type="file" id="coursewareFile" name="coursewareFile" accept=".ppt,.pptx,.pdf,.doc,.docx" required>
+            </div>
+            <button type="submit">上传课件</button>
+        </form>
+        <div id="uploadResponse" class="response" style="display: none;"></div>
+    </div>
+
+    <!-- 查询课件列表 -->
+    <div class="container">
+        <h2>查询课件列表</h2>
+        <div class="form-group">
+            <label for="queryCourseId">课程ID:</label>
+            <input type="text" id="queryCourseId" value="2500010B">
+        </div>
+        <button onclick="queryCoursewareList()">查询课件列表</button>
+        <div id="queryResponse" class="response" style="display: none;"></div>
+        <div id="coursewareList" style="margin-top: 20px;"></div>
+    </div>
+
+    <!-- 删除课件 -->
+    <div class="container">
+        <h2>删除课件</h2>
+        <div class="form-group">
+            <label for="deleteCoursewareId">课件ID:</label>
+            <input type="number" id="deleteCoursewareId">
+        </div>
+        <button class="danger" onclick="deleteCourseware()">删除课件</button>
+        <div id="deleteResponse" class="response" style="display: none;"></div>
+    </div>
+
+    <script>
+        // 上传课件
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData();
+            formData.append('courseId', document.getElementById('courseId').value);
+            
+            const coursewareTitle = document.getElementById('coursewareTitle').value;
+            if (coursewareTitle) {
+                formData.append('coursewareTitle', coursewareTitle);
+            }
+            
+            const coursewareOrder = document.getElementById('coursewareOrder').value;
+            if (coursewareOrder) {
+                formData.append('coursewareOrder', coursewareOrder);
+            }
+            
+            const fileInput = document.getElementById('coursewareFile');
+            if (fileInput.files.length > 0) {
+                formData.append('coursewareFile', fileInput.files[0]);
+            }
+            
+            try {
+                const response = await fetch('/api/eduagentx/courseware/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                const responseDiv = document.getElementById('uploadResponse');
+                responseDiv.style.display = 'block';
+                
+                if (response.ok) {
+                    responseDiv.className = 'response success';
+                    responseDiv.textContent = JSON.stringify(result, null, 2);
+                    // 上传成功后自动刷新课件列表
+                    setTimeout(() => queryCoursewareList(), 1000);
+                } else {
+                    responseDiv.className = 'response error';
+                    responseDiv.textContent = JSON.stringify(result, null, 2);
+                }
+            } catch (error) {
+                const responseDiv = document.getElementById('uploadResponse');
+                responseDiv.style.display = 'block';
+                responseDiv.className = 'response error';
+                responseDiv.textContent = '请求失败: ' + error.message;
+            }
+        });
+
+        // 查询课件列表
+        async function queryCoursewareList() {
+            const courseId = document.getElementById('queryCourseId').value;
+            
+            if (!courseId) {
+                alert('请输入课程ID');
+                return;
+            }
+            
+            const requestData = {
+                courseId: courseId
+            };
+            
+            try {
+                const response = await fetch('/api/eduagentx/courseware/list', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                const result = await response.json();
+                const responseDiv = document.getElementById('queryResponse');
+                responseDiv.style.display = 'block';
+                
+                if (response.ok) {
+                    responseDiv.className = 'response success';
+                    responseDiv.textContent = JSON.stringify(result, null, 2);
+                    
+                    // 显示课件列表
+                    displayCoursewareList(result.data);
+                } else {
+                    responseDiv.className = 'response error';
+                    responseDiv.textContent = JSON.stringify(result, null, 2);
+                }
+            } catch (error) {
+                const responseDiv = document.getElementById('queryResponse');
+                responseDiv.style.display = 'block';
+                responseDiv.className = 'response error';
+                responseDiv.textContent = '请求失败: ' + error.message;
+            }
+        }
+
+        // 显示课件列表
+        function displayCoursewareList(data) {
+            const listDiv = document.getElementById('coursewareList');
+            listDiv.innerHTML = '';
+            
+            if (data && data.coursewareList && data.coursewareList.length > 0) {
+                const title = document.createElement('h3');
+                title.textContent = `课件列表 (共 ${data.totalCount} 个)`;
+                listDiv.appendChild(title);
+                
+                data.coursewareList.forEach(courseware => {
+                    const item = document.createElement('div');
+                    item.className = 'courseware-item';
+                    
+                    const titleElement = document.createElement('h4');
+                    titleElement.textContent = courseware.coursewareTitle || courseware.fileName;
+                    item.appendChild(titleElement);
+                    
+                    const meta = document.createElement('div');
+                    meta.className = 'courseware-meta';
+                    meta.innerHTML = `
+                        <p><strong>ID:</strong> ${courseware.coursewareId}</p>
+                        <p><strong>文件名:</strong> ${courseware.fileName}</p>
+                        <p><strong>顺序:</strong> ${courseware.coursewareOrder}</p>
+                        <p><strong>大小:</strong> ${courseware.fileSizeFormatted}</p>
+                        <p><strong>创建时间:</strong> ${courseware.createTime}</p>
+                    `;
+                    item.appendChild(meta);
+                    
+                    const actions = document.createElement('div');
+                    actions.innerHTML = `
+                        <button onclick="downloadCourseware(${courseware.coursewareId})">下载</button>
+                        <button class="danger" onclick="deleteCoursewareById(${courseware.coursewareId})">删除</button>
+                    `;
+                    item.appendChild(actions);
+                    
+                    listDiv.appendChild(item);
+                });
+            } else {
+                listDiv.innerHTML = '<p>暂无课件</p>';
+            }
+        }
+
+        // 下载课件
+        function downloadCourseware(coursewareId) {
+            const url = `/api/eduagentx/courseware/download/${coursewareId}`;
+            
+            // 创建下载链接
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = '';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // 删除课件（通过ID）
+        async function deleteCoursewareById(coursewareId) {
+            if (!confirm('确定要删除这个课件吗？')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/eduagentx/courseware/${coursewareId}`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    alert('课件删除成功');
+                    // 刷新课件列表
+                    queryCoursewareList();
+                } else {
+                    alert('删除失败: ' + (result.message || '未知错误'));
+                }
+            } catch (error) {
+                alert('删除失败: ' + error.message);
+            }
+        }
+
+        // 删除课件（通过输入框）
+        async function deleteCourseware() {
+            const coursewareId = document.getElementById('deleteCoursewareId').value;
+            
+            if (!coursewareId) {
+                alert('请输入课件ID');
+                return;
+            }
+            
+            if (!confirm('确定要删除这个课件吗？')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/eduagentx/courseware/${coursewareId}`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                const responseDiv = document.getElementById('deleteResponse');
+                responseDiv.style.display = 'block';
+                
+                if (response.ok) {
+                    responseDiv.className = 'response success';
+                    responseDiv.textContent = JSON.stringify(result, null, 2);
+                    // 删除成功后自动刷新课件列表
+                    setTimeout(() => queryCoursewareList(), 1000);
+                } else {
+                    responseDiv.className = 'response error';
+                    responseDiv.textContent = JSON.stringify(result, null, 2);
+                }
+            } catch (error) {
+                const responseDiv = document.getElementById('deleteResponse');
+                responseDiv.style.display = 'block';
+                responseDiv.className = 'response error';
+                responseDiv.textContent = '请求失败: ' + error.message;
+            }
+        }
+
+        // 页面加载时自动查询课件列表
+        window.addEventListener('load', function() {
+            queryCoursewareList();
+        });
+    </script>
+</body>
+</html>

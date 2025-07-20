@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/course")
+@RequestMapping("/api/eduagentx/course")
 public class CourseEvaluationDiscussionController {
     @Autowired
     private CourseQaService courseQaService;

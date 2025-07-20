@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>教案管理测试页面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>教案管理测试页面</h1>
+
+    <!-- 上传教案 -->
+    <div class="container">
+        <h2>上传教案</h2>
+        <form id="uploadForm">
+            <div class="form-group">
+                <label for="courseId">课程ID:</label>
+                <input type="text" id="courseId" name="courseId" value="2500010B" required>
+            </div>
+            <div class="form-group">
+                <label for="chapterId">章节ID (可选，留空表示课程教案):</label>
+                <input type="number" id="chapterId" name="chapterId">
+            </div>
+            <div class="form-group">
+                <label for="planTitle">教案标题 (可选):</label>
+                <input type="text" id="planTitle" name="planTitle" placeholder="例如：第一章 计算机图形学概述">
+            </div>
+            <div class="form-group">
+                <label for="version">版本号 (可选，留空自动递增):</label>
+                <input type="number" id="version" name="version" min="1">
+            </div>
+            <div class="form-group">
+                <label for="planFile">教案文件 (支持 .md, .txt, .markdown):</label>
+                <input type="file" id="planFile" name="planFile" accept=".md,.txt,.markdown" required>
+            </div>
+            <button type="submit">上传教案</button>
+        </form>
+        <div id="uploadResponse" class="response" style="display: none;"></div>
+    </div>
+
+    <!-- 查询教案 -->
+    <div class="container">
+        <h2>查询教案</h2>
+        <div class="form-group">
+            <label for="queryCourseId">课程ID:</label>
+            <input type="text" id="queryCourseId" value="2500010B">
+        </div>
+        <div class="form-group">
+            <label for="queryChapterId">章节ID (可选):</label>
+            <input type="number" id="queryChapterId">
+        </div>
+        <div class="form-group">
+            <label for="queryVersion">版本号 (可选，留空查询最新版本):</label>
+            <input type="number" id="queryVersion">
+        </div>
+        <button onclick="queryLessonPlan()">查询教案</button>
+        <button onclick="downloadLessonPlan()">下载教案</button>
+        <div id="queryResponse" class="response" style="display: none;"></div>
+    </div>
+
+    <script>
+        // 上传教案
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData();
+            formData.append('courseId', document.getElementById('courseId').value);
+            
+            const chapterId = document.getElementById('chapterId').value;
+            if (chapterId) {
+                formData.append('chapterId', chapterId);
+            }
+            
+            const planTitle = document.getElementById('planTitle').value;
+            if (planTitle) {
+                formData.append('planTitle', planTitle);
+            }
+            
+            const version = document.getElementById('version').value;
+            if (version) {
+                formData.append('version', version);
+            }
+            
+            const fileInput = document.getElementById('planFile');
+            if (fileInput.files.length > 0) {
+                formData.append('planFile', fileInput.files[0]);
+            }
+            
+            try {
+                const response = await fetch('/api/eduagentx/lesson-plan/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                const responseDiv = document.getElementById('uploadResponse');
+                responseDiv.style.display = 'block';
+                
+                if (response.ok) {
+                    responseDiv.className = 'response success';
+                    responseDiv.textContent = JSON.stringify(result, null, 2);
+                } else {
+                    responseDiv.className = 'response error';
+                    responseDiv.textContent = JSON.stringify(result, null, 2);
+                }
+            } catch (error) {
+                const responseDiv = document.getElementById('uploadResponse');
+                responseDiv.style.display = 'block';
+                responseDiv.className = 'response error';
+                responseDiv.textContent = '请求失败: ' + error.message;
+            }
+        });
+
+        // 查询教案
+        async function queryLessonPlan() {
+            const courseId = document.getElementById('queryCourseId').value;
+            const chapterId = document.getElementById('queryChapterId').value;
+            const version = document.getElementById('queryVersion').value;
+            
+            if (!courseId) {
+                alert('请输入课程ID');
+                return;
+            }
+            
+            const requestData = {
+                courseId: courseId
+            };
+            
+            if (chapterId) {
+                requestData.chapterId = parseInt(chapterId);
+            }
+            
+            if (version) {
+                requestData.version = parseInt(version);
+            }
+            
+            try {
+                const response = await fetch('/api/eduagentx/lesson-plan/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                const result = await response.json();
+                const responseDiv = document.getElementById('queryResponse');
+                responseDiv.style.display = 'block';
+                
+                if (response.ok) {
+                    responseDiv.className = 'response success';
+                    responseDiv.textContent = JSON.stringify(result, null, 2);
+                } else {
+                    responseDiv.className = 'response error';
+                    responseDiv.textContent = JSON.stringify(result, null, 2);
+                }
+            } catch (error) {
+                const responseDiv = document.getElementById('queryResponse');
+                responseDiv.style.display = 'block';
+                responseDiv.className = 'response error';
+                responseDiv.textContent = '请求失败: ' + error.message;
+            }
+        }
+
+        // 下载教案
+        function downloadLessonPlan() {
+            const courseId = document.getElementById('queryCourseId').value;
+            const chapterId = document.getElementById('queryChapterId').value;
+            const version = document.getElementById('queryVersion').value;
+            
+            if (!courseId) {
+                alert('请输入课程ID');
+                return;
+            }
+            
+            let url = `/api/eduagentx/lesson-plan/download/${courseId}?`;
+            const params = new URLSearchParams();
+            
+            if (chapterId) {
+                params.append('chapterId', chapterId);
+            }
+            
+            if (version) {
+                params.append('version', version);
+            }
+            
+            url += params.toString();
+            
+            // 创建下载链接
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = '';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>

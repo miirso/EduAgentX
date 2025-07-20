@@ -1,0 +1,111 @@
+@startuml 代码层架构
+' 定义样式
+!define RECTANGLE class
+hide circle
+hide methods
+hide stereotypes
+skinparam monochrome false
+skinparam shadowing false
+skinparam defaultTextAlignment center
+skinparam packageStyle rectangle
+skinparam rectangleBorderThickness 1
+skinparam BackgroundColor #FFFFFF
+skinparam rectangle {
+  BackgroundColor #F0F8FF
+  BorderColor #4682B4
+  FontColor #000000
+}
+skinparam package {
+  BackgroundColor #FFFFFF
+  BorderColor #A9A9A9
+}
+
+' 水平布局
+left to right direction
+
+package "前端层" as Frontend {
+  RECTANGLE "HTTP/JSON" as HTTP
+}
+
+package "表现层" #E0FFFF {
+  RECTANGLE "Controller层" as Controller {
+    RECTANGLE "AdminController" as AdminController
+    RECTANGLE "StudentController" as StudentController
+    RECTANGLE "TeacherController" as TeacherController
+    RECTANGLE "CourseController" as CourseController
+    RECTANGLE "ExamController" as ExamController
+    RECTANGLE "CourseQaController" as CourseQaController
+  }
+}
+
+package "DTO层" #FFFACD {
+  RECTANGLE "数据传输对象" as DTO {
+    RECTANGLE "请求DTO\n(ReqDTO)" as ReqDTO
+    RECTANGLE "响应DTO\n(RespDTO)" as RespDTO
+  }
+}
+
+package "业务层" #E6E6FA {
+  RECTANGLE "Service接口层" as Service {
+    RECTANGLE "StudentService" as StudentService
+    RECTANGLE "TeacherService" as TeacherService
+    RECTANGLE "CourseService" as CourseService
+    RECTANGLE "ExamService" as ExamService
+  }
+  
+  RECTANGLE "Service实现层" as ServiceImpl {
+    RECTANGLE "StudentServiceImpl" as StudentServiceImpl
+    RECTANGLE "TeacherServiceImpl" as TeacherServiceImpl
+    RECTANGLE "CourseServiceImpl" as CourseServiceImpl
+    RECTANGLE "ExamServiceImpl" as ExamServiceImpl
+  }
+}
+
+package "数据访问层" #FFE4E1 {
+  RECTANGLE "Mapper层" as Mapper {
+    RECTANGLE "StudentMapper" as StudentMapper
+    RECTANGLE "TeacherMapper" as TeacherMapper
+    RECTANGLE "CourseMapper" as CourseMapper
+    RECTANGLE "ExamMapper" as ExamMapper
+  }
+}
+
+package "实体层" #F0FFF0 {
+  RECTANGLE "数据对象(DO)" as DO {
+    RECTANGLE "StudentDO" as StudentDO
+    RECTANGLE "TeacherDO" as TeacherDO
+    RECTANGLE "CourseDO" as CourseDO
+    RECTANGLE "ExamDO" as ExamDO
+  }
+}
+
+package "通用组件" #FFF5EE {
+  RECTANGLE "配置" as Config
+  RECTANGLE "工具类" as Utils
+  RECTANGLE "异常处理" as Exception
+  RECTANGLE "拦截器" as Interceptor
+}
+
+package "外部系统" #F5F5F5 {
+  database "PostgreSQL" as DB
+  RECTANGLE "Redis缓存" as Redis
+}
+
+' 定义连接关系
+Frontend --> HTTP : 请求/响应
+HTTP --> Controller : 接口调用
+Controller --> ReqDTO : 接收数据
+Controller --> RespDTO : 返回数据
+Controller --> Service : 调用
+Service --> ServiceImpl : 实现
+ServiceImpl --> Mapper : 调用
+ServiceImpl --> DO : 操作
+Mapper --> DO : 映射
+Mapper --> DB : 执行SQL
+ServiceImpl --> Redis : 缓存数据
+ServiceImpl --> Utils : 使用工具类
+Controller --> Exception : 异常处理
+Config --> ServiceImpl : 配置注入
+Interceptor --> HTTP : 请求拦截
+
+@enduml
